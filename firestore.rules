@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- ViajesApp: solo las cuentas de Google de esta lista ----------
+    function viajesAppOk() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'flandinitpf@gmail.com'
+        ];
+    }
+    match /viajesapp_viajes/{viaje} {
+      allow read, write: if viajesAppOk();
+    }
+    match /viajesapp_config/{doc} {
+      allow read, write: if viajesAppOk();
+    }
+
+    // ---------- StockApp ----------
+    // Administrador: entra con Google y es el único que crea o quita usuarios.
+    function stockAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'flandinitpf@gmail.com'
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    // Usuarios con correo y contraseña creados por el administrador desde Configuración.
+    function stockOk() {
+      return request.auth != null &&
+        (stockAdmin() || exists(/databases/$(database)/documents/stockapp_usuarios/$(request.auth.token.email)));
+    }
+    // Edición de ítems y configuración: el administrador y los usuarios con la casilla "Puede editar".
+    function stockEditor() {
+      return stockAdmin() || (stockOk() &&
+        get(/databases/$(database)/documents/stockapp_usuarios/$(request.auth.token.email)).data.editor == true);
+    }
+    match /stockapp_usuarios/{email} {
+      allow read: if stockOk();
+      allow write: if stockAdmin();
+    }
+    match /stockapp_config/{doc} {
+      allow read: if stockOk();
+      allow write: if stockEditor();
+    }
+    match /stockapp_items/{doc} {
+      allow read: if stockOk();
+      allow create, delete: if stockEditor();
+      // Sin permiso de edición solo se puede mover stock y marcar pedidos.
+      allow update: if stockEditor() || (stockOk() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'reservas']));
+    }
+    match /stockapp_movimientos/{doc} {
+      allow read, create: if stockOk();
+      // Solo se puede marcar como anulado (quien lo cargó o un editor); nunca borrar.
+      allow update: if stockOk()
+        && (stockEditor() || resource.data.email == request.auth.token.email)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['anulado', 'anuladoPor', 'anuladoFecha']);
+      allow delete: if false;
+    }
+
+  }
+}
