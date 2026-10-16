@@ -120,7 +120,7 @@ details>.sec{margin-top:12px;gap:16px}
 .stk{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
 .hero{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .hero>div{flex:1;min-width:180px} .hero small{color:var(--tenue)}
-.logo{width:26px;height:26px;color:var(--acento);vertical-align:-5px;margin-right:6px} .logo rect{fill:var(--acento);stroke:none}
+.logo{width:26px;height:26px;color:var(--acento);vertical-align:-5px;margin-right:6px} .logo rect,.logo .f{fill:var(--acento);stroke:none}
 .caja .ct{display:flex;flex-direction:column-reverse;align-items:flex-start;width:100%;gap:6px;line-height:1.2} .caja svg{width:20px;height:20px;flex:none}
 .rapidos svg{width:24px;height:24px;vertical-align:-5px;margin-right:8px}
 @media (prefers-reduced-motion:no-preference){.nivel .fill{transition:width .4s ease}}
@@ -267,6 +267,45 @@ nav button{background:none!important;border:0!important;color:var(--tenue)}
 nav button:hover{background:color-mix(in srgb,var(--texto) 6%,transparent)!important}
 nav button[aria-current=page]{color:var(--texto);background:color-mix(in srgb,var(--acento) 16%,transparent)!important}
 @media (max-width:899px){nav button:hover{background:none!important} nav button[aria-current=page]{color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)!important}}
+
+/* ===== Piel v5: inicio con secciones, engranaje arriba, sin brillos que se salgan ===== */
+button[data-act=compartir]::before,button[data-act=verQR]::before,button[data-act=whatsapp]::before,button[data-act=copiarLink]::before{content:"";display:inline-block;width:15px;height:15px;margin-right:7px;vertical-align:-2px;background:currentColor;-webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat;opacity:.9}
+button[data-act=compartir]{--i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='18' cy='5' r='2.5'/%3E%3Ccircle cx='6' cy='12' r='2.5'/%3E%3Ccircle cx='18' cy='19' r='2.5'/%3E%3Cpath d='M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4'/%3E%3C/svg%3E")}
+button[data-act=verQR]{--i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2'/%3E%3C/svg%3E")}
+button[data-act=whatsapp]{--i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20l1.3-4A8 8 0 1 1 8.5 19z'/%3E%3Cpath d='M9 9.5c0 3 2.5 5.5 5.5 5.5'/%3E%3C/svg%3E")}
+button[data-act=copiarLink]{--i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='11' height='11' rx='2'/%3E%3Cpath d='M15 5V4H4v11h1'/%3E%3C/svg%3E")}
+#app{padding-block:16px 32px!important;padding-left:16px!important}
+@media (min-width:900px){#app{padding-inline:24px!important;padding-block:24px 40px!important}}
+.barra{bottom:calc(12px + env(safe-area-inset-bottom,0px))!important}
+#toast{bottom:28px}
+.cab{display:flex!important;flex-wrap:nowrap}
+.cab .izq,.cab .der2{display:flex;align-items:center;gap:10px;min-width:0}
+.cab button.marca{background:none!important;border:0!important;padding:0;min-height:0;color:var(--texto);font:600 25px var(--f-tit);letter-spacing:.04em;display:flex;align-items:center;box-shadow:none!important;white-space:nowrap}
+.cab button.marca:active{transform:none}
+.volver{display:inline-flex;align-items:center;gap:4px;padding:6px 12px 6px 8px!important}
+.volver svg,.engr svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.engr{width:42px;height:42px;padding:0!important;display:grid;place-items:center;border-radius:12px!important}
+.engr svg{width:22px;height:22px}
+.engr[aria-current=page]{color:var(--acento)!important;border-color:var(--acento)!important;background:color-mix(in srgb,var(--acento) 16%,var(--panel2))!important}
+.usr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:520px){.usr{display:none} .cab button.marca{font-size:22px}}
+.secciones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:700px){.secciones{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1050px){.secciones{grid-template-columns:repeat(5,minmax(0,1fr))}}
+button.secc{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:14px!important;min-height:0;border-radius:var(--r)!important;border:1px solid var(--linea)!important;border-top:3px solid var(--c)!important;background:radial-gradient(220px 110px at 100% 0,color-mix(in srgb,var(--c) 18%,transparent),transparent 70%),linear-gradient(180deg,var(--panel2),var(--panel))!important;box-shadow:var(--sh);transition:transform .12s,border-color .12s}
+button.secc:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--c) 45%,var(--linea))!important;border-top-color:var(--c)!important}
+.secc .tile.xl{margin-bottom:6px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 35%,transparent)!important}
+.secc .sn{font:600 20px var(--f-tit);letter-spacing:.03em;color:var(--texto)}
+.secc .sb{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;min-height:22px}
+.secc .pil{font-size:11.5px}
+@media (max-width:699px){.secciones .secc:last-child:nth-child(odd){grid-column:1/-1}}
+/* sin halos alrededor de botones e íconos grandes */
+button.pri,button.pri:hover{box-shadow:none!important}
+.tile.xl{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 35%,transparent)!important}
+.enlace{display:block;padding:8px 10px;border-radius:8px;background:var(--fondo);border:1px solid var(--linea);font-size:13px;overflow-wrap:anywhere;color:var(--texto)}
+#qr-caja:not(:empty){display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.qr{background:#fff;padding:12px;border-radius:10px}
+.qr img,.qr canvas{display:block}
 </style>
 </head>
 <body>
@@ -304,7 +343,7 @@ function selMaterial(a,val,lote,id){ // lista de materiales de la pestaña, con 
 }
 const matElegido=d=>d.matSel==='__otro'?(d.matOtro||'').trim():(d.matSel||'');
 const MOTIVOS={entrada:['Compra','Ajuste de inventario','Devolución de producción'],salida:['Consumo de producción','Ajuste de inventario']};
-const ICONOS={componentes:'<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',resumen:'<path d="M4 11l8-7 8 7v9H4z"/>',panol:'<path d="M7 21v-4l-2.5-3.5V7.5a1.5 1.5 0 0 1 3 0V11V4.5a1.5 1.5 0 0 1 3 0V10V3.5a1.5 1.5 0 0 1 3 0V10V5a1.5 1.5 0 0 1 3 0v8l2-2.2a1.5 1.5 0 0 1 2.3 2L17 17.5V21z"/><path d="M7 18h10"/>',noferrosos:'<path d="M2.5 18l2-5h5.5l2 5zM12 18l2-5h5.5l2 5zM7.2 13l2-5h5.6l2 5z"/>',aceros:'<path d="M3 8l9-4 9 4-9 4zM3 12l9 4 9-4M3 16l9 4 9-4"/>',plasticos:'<ellipse cx="6" cy="12" rx="2.5" ry="5"/><ellipse cx="6" cy="12" rx=".9" ry="2.2"/><path d="M6 7h12a2.5 5 0 0 1 0 10H6"/>',config:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>'};
+const ICONOS={componentes:'<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',resumen:'<path d="M4 11l8-7 8 7v9H4z"/>',panol:'<path d="M7 21v-4l-2.5-3.5V7.5a1.5 1.5 0 0 1 3 0V11V4.5a1.5 1.5 0 0 1 3 0V10V3.5a1.5 1.5 0 0 1 3 0V10V5a1.5 1.5 0 0 1 3 0v8l2-2.2a1.5 1.5 0 0 1 2.3 2L17 17.5V21z"/><path d="M7 18h10"/>',noferrosos:'<path d="M2.5 18l2-5h5.5l2 5zM12 18l2-5h5.5l2 5zM7.2 13l2-5h5.6l2 5z"/>',aceros:'<path d="M3 8l9-4 9 4-9 4zM3 12l9 4 9-4M3 16l9 4 9-4"/>',plasticos:'<ellipse cx="6" cy="12" rx="2.5" ry="5"/><ellipse cx="6" cy="12" rx=".9" ry="2.2"/><path d="M6 7h12a2.5 5 0 0 1 0 10H6"/>',config:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'};
 const ACENTOS=[['Azul','#6fb1e8'],['Naranja','#ef7d32'],['Verde','#4cc38a'],['Turquesa','#3fc1c9'],['Violeta','#ab8cec'],['Rosa','#ec6fa7'],['Amarillo','#e8b84a'],['Rojo','#f0736b']];
 function acentoActual(){try{return localStorage.getItem('stockapp-acento')||'#6fb1e8'}catch(e){return '#6fb1e8'}}
 function ponerAcento(h,guardar){
@@ -387,7 +426,7 @@ function estado(it){ // sin stock mínimo cargado no hay aviso de compra; lo res
   const min=it.minimo||0,r=min*(1+(S.cfg.rojoPct||0)/100),a=min*(1+(S.cfg.amarilloPct||0)/100),d=disponible(it);
   if(d<=r)return 'rojo'; if(d<=a)return 'amarillo'; return 'verde';
 }
-const LOGO='<svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v18M20 3v18M4 12h16M4 20h16"/><rect x="6.5" y="6" width="5" height="5" rx=".8"/><rect x="13" y="7.5" width="5" height="3.5" rx=".8"/><rect x="6.5" y="15.5" width="3.5" height="3.5" rx=".8"/><rect x="11.5" y="14" width="6.5" height="5" rx=".8"/></svg>';
+const LOGO='<svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M12 2.8l8.2 4.5-8.2 4.5-8.2-4.5z"/><path d="M12 2.8l8.2 4.5v9.4L12 21.2l-8.2-4.5V7.3zM3.8 7.3l8.2 4.5 8.2-4.5M12 11.8v9.4"/><path d="M6.3 12.2l3.4 1.9M6.3 15.2l3.4 1.9"/></svg>';
 const tile=(a,t)=>`<span class="tile${t?' '+t:''}" style="--c:var(--c-${a})" aria-hidden="true"><svg viewBox="0 0 24 24">${ICONOS[a]}</svg></span>`;
 const IC={entrada:'<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',salida:'<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',rojo:'<path d="M12 4l9 16H3zM12 10v4M12 17v.5"/>',amarillo:'<path d="M4 18a8 8 0 1 1 16 0M12 18l4-5"/>',ped:'<path d="M2 7h12v9H2zM14 10h4l3 3v3h-7"/><circle cx="6" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>'};
 const ic=(k,c)=>`<svg viewBox="0 0 24 24" aria-hidden="true"${c?` class="${c}"`:''}>${IC[k]}</svg>`;
@@ -411,15 +450,33 @@ function opciones(lista,sel,vacio){return (vacio!=null?`<option value="">${esc(v
 const enUso=campo=>[...new Set(S.items.map(i=>i[campo]).filter(Boolean))];
 const listaCfg=(k,campo)=>[...new Set([...(S.cfg[k]||[]),...enUso(campo)])].sort((a,b)=>a.localeCompare(b,'es'));
 
+/* ---------- Navegación: inicio con secciones; Atrás vuelve al inicio ---------- */
+function ponerTab(v){if(S.sel&&S.sel.area!==v)S.sel=null;S.tab=v;render();scrollTo(0,0)}
+function irA(v){
+  if(v===S.tab)return;
+  if(v==='resumen'&&history.state&&history.state.stockTab){history.back();return}
+  try{history.pushState({stockTab:v},'')}catch(e){}
+  ponerTab(v);
+}
+addEventListener('popstate',e=>{if(!S.cfg)return;if(!$('#m1').hidden&&typeof cerrar==='function')cerrar();ponerTab((e.state&&e.state.stockTab)||'resumen')});
+const URLAPP=/github\.io$/.test(location.hostname)?location.origin+location.pathname:'https://landinife.github.io/StockApp/';
+
 /* ---------- Pantallas ---------- */
 function render(){
   if(!S.cfg)return;
-  $('#nav').hidden=false;
-  $('#nav').innerHTML=[['resumen','Resumen','Resumen'],...Object.keys(AREAS).map(a=>[a,AREAS[a].n,AREAS[a].c]),['config','Configuración','Config.']].map(([k,n,c])=>`<button data-act="tab" data-v="${k}" style="--c:var(--c-${k})"${S.tab===k?' aria-current="page"':''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONOS[k]}</svg><span class="nc">${c}</span><span class="nl">${n}</span></button>`).join('');
-  $('#nav').insertAdjacentHTML('afterbegin',`<div class="marca nmarca">${LOGO}Stock<b>App</b></div>`);$('#nav').insertAdjacentHTML('beforeend',`<small class="tenue nusr">${esc(S.user.nombre||S.user.email)}</small>`);
-  const cab=`<div class="cab"><div class="marca">${LOGO}Stock<b>App</b></div><small class="tenue">${esc(S.user.nombre||S.user.email)}</small></div>`+(S.demo?`<div class="demo">Modo de prueba: los datos son de ejemplo y se guardan solo en este navegador. Cuando conectes Firebase se sincronizan entre PC y teléfono.</div>`:'');
+  $('#nav').hidden=true;$('#nav').innerHTML='';
+  if(0)$('#nav').innerHTML=[['resumen','Resumen','Resumen'],...Object.keys(AREAS).map(a=>[a,AREAS[a].n,AREAS[a].c]),['config','Configuración','Config.']].map(([k,n,c])=>`<button data-act="tab" data-v="${k}" style="--c:var(--c-${k})"${S.tab===k?' aria-current="page"':''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONOS[k]}</svg><span class="nc">${c}</span><span class="nl">${n}</span></button>`).join('');
+  if(0)$('#nav').insertAdjacentHTML('afterbegin',`<div class="marca nmarca">${LOGO}Stock<b>App</b></div>`);$('#nav').insertAdjacentHTML('beforeend',`<small class="tenue nusr">${esc(S.user.nombre||S.user.email)}</small>`);
+  const cab=`<div class="cab"><div class="izq">${S.tab!=='resumen'?`<button class="volver" data-act="tab" data-v="resumen" aria-label="Volver al inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Inicio</span></button>`:''}<button class="marca" data-act="tab" data-v="resumen" aria-label="StockApp, ir al inicio">${LOGO}<span>Stock<b>App</b></span></button></div><div class="der2"><small class="tenue usr">${esc(S.user.nombre||S.user.email)}</small><button class="engr" data-act="tab" data-v="config" aria-label="Configuración"${S.tab==='config'?' aria-current="page"':''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONOS.config}</svg></button></div></div>`+(S.demo?`<div class="demo">Modo de prueba: los datos son de ejemplo y se guardan solo en este navegador. Cuando conectes Firebase se sincronizan entre PC y teléfono.</div>`:'');
   $('#app').innerHTML=cab+(S.tab==='resumen'?vResumen():S.tab==='config'?vConfig():vArea(S.tab));
   if(AREAS[S.tab])renderLista();
+  if(S.tab==='config')plegar();
+}
+function plegar(){ // cada bloque de Configuración se abre y se cierra tocando su título
+  document.querySelectorAll('#app div.bloque').forEach(b=>{const h=b.firstElementChild;if(!h||h.tagName!=='H2')return;
+    const k='cfg:'+h.textContent,d=document.createElement('details'),su=document.createElement('summary'),w=document.createElement('div');
+    d.className='bloque';d.dataset.k=k;if(S.abierto[k])d.open=true;w.className='sec';
+    b.replaceWith(d);su.appendChild(h);d.appendChild(su);while(b.firstChild)w.appendChild(b.firstChild);d.appendChild(w)});
 }
 function alDato(){ // llega un cambio de datos
   if(!S.cfg)return;
@@ -462,7 +519,10 @@ function vResumen(){
       ${S.cfg.dolar>0?`<small class="tenue">≈ $ ${Math.round(t*S.cfg.dolar).toLocaleString('es-AR')} al dólar de $ ${fmt(S.cfg.dolar)}</small>`:ars?`<small style="color:var(--amar)">Hay ${ars} ítem(s) con costo en pesos y falta cargar el valor del dólar en Configuración: no están sumados.</small>`:''}
       <div class="chips">${Object.keys(AREAS).filter(a=>pa[a]).map(a=>`<span class="chip" style="padding:3px 12px">${AREAS[a].n} · ${fUSD(pa[a])}</span>`).join('')}</div>
       ${sin?`<small class="tenue">${sin} ítem(s) todavía no tienen costo cargado.</small>`:''}</div>`}
+  const secc=Object.keys(AREAS).map(a=>{const l=S.items.filter(i=>i.area===a),r=l.filter(i=>estado(i)==='rojo').length,y=l.filter(i=>estado(i)==='amarillo').length;
+    return `<button class="secc" data-act="tab" data-v="${a}" style="--c:var(--c-${a})">${tile(a,'xl')}<span class="sn">${AREAS[a].n}</span><small class="tenue">${l.length} ítem${l.length===1?'':'s'}</small><span class="sb">${r?`<span class="pil rojo">${r} en mínimo</span>`:''}${y?`<span class="pil amarillo">${y} por agotarse</span>`:''}${!r&&!y&&l.length?'<span class="pil verde">En orden</span>':''}</span></button>`}).join('');
   return `<div class="rapidos"><button class="ent" data-act="rapido" data-v="entrada">${ic('entrada')}Entrada</button><button class="sal" data-act="rapido" data-v="salida">${ic('salida')}Salida</button></div>
+  <div class="sec"><h2>Secciones</h2><div class="secciones">${secc}</div></div>
   <div class="cajas">${caja('rojo','r','En mínimo')}${caja('amarillo','a','Por agotarse')}${caja('ped','p','Pedido en curso')}</div>
   ${det}
   ${valor}
@@ -702,7 +762,9 @@ function vConfig(){
   const sesion=`<div class="bloque"><h2>Sesión</h2><span>${esc(S.user.email)}</span><div class="fila">${S.demo?'<button data-act="reiniciarDemo">Restablecer datos de ejemplo</button>':'<button data-act="salir">Cerrar sesión</button>'}</div></div>`;
   const ac=acentoActual().toLowerCase(),apar=`<div class="bloque"><h2>Apariencia</h2><span>Color de énfasis</span><div class="acentos">${ACENTOS.map(([n,h])=>`<button class="sw" data-act="acento" data-v="${h}" aria-pressed="${ac===h}" style="--sw:${h}"><i></i>${n}</button>`).join('')}</div>
     <label>Otro color<input type="color" id="ac-otro" value="${ac}"></label><small class="tenue">Se usa en botones, pestaña activa, títulos y gráficos. Se guarda en este dispositivo, así cada usuario elige el suyo.</small></div>`;
-  if(!S.editor)return `<h1>Configuración</h1>${apar}<div class="bloque"><span>Tu usuario puede registrar entradas, salidas y pedidos.</span><small class="tenue">Para cargar o modificar ítems, pedile al administrador que habilite la edición.</small></div>`+sesion;
+  const comp=`<div class="bloque"><h2>Compartir la app</h2><span class="tenue">Mandá el link para que otros la abran o la instalen en el celular. Para entrar necesitan un usuario creado por el administrador.</span>
+    <code class="enlace">${esc(URLAPP)}</code><div class="fila"><button data-act="compartir">Compartir</button><button data-act="whatsapp">WhatsApp</button><button data-act="copiarLink">Copiar link</button><button data-act="verQR">Código QR</button></div><div id="qr-caja"></div></div>`;
+  if(!S.editor)return `<h1>Configuración</h1>${apar}${comp}<div class="bloque"><span>Tu usuario puede registrar entradas, salidas y pedidos.</span><small class="tenue">Para cargar o modificar ítems, pedile al administrador que habilite la edición.</small></div>`+sesion;
   const chips=k=>`<div class="chips">${lista(k).map((x,i)=>`<span class="chip">${esc(x)}<button data-act="quitarLista" data-v="${k}" data-i="${i}" aria-label="Quitar ${esc(x)}">×</button></span>`).join('')||'<small class="tenue">Sin cargar.</small>'}</div><button class="chico" data-act="agregarLista" data-v="${k}" style="align-self:flex-start">Agregar</button>`;
   const bc=(a,ci,si)=>`<span class="fila"><button class="chico" data-act="catRenombrar" data-v="${a}" data-c="${ci}" data-s="${si??''}">Renombrar</button><button class="chico pel" data-act="catBorrar" data-v="${a}" data-c="${ci}" data-s="${si??''}">Eliminar</button></span>`;
   const std=a=>{const FORMATOS=formatosStd(a),m={};FORMATOS.forEach(f=>{const x=stdDe(a,f);if(x)m[f]=x});return `<form data-form="medidas" class="sec" style="gap:8px"><input type="hidden" name="area" value="${a}"><h3>Medidas estándar (mm)</h3><small class="tenue">Se completan solas al elegir el formato en un ítem nuevo.</small>
@@ -713,7 +775,7 @@ function vConfig(){
     ${cats(a).map((c,ci)=>`<div class="cat"><div class="entre"><b>${esc(c.nombre)}</b>${bc(a,ci)}</div>${(c.subs||[]).map((s,si)=>`<div class="entre sub"><span>${esc(s.nombre)}</span>${bc(a,ci,si)}</div>`).join('')}<button class="chico" data-act="subNueva" data-v="${a}" data-c="${ci}" style="align-self:flex-start;margin-left:18px">Subcategoría</button></div>`).join('')}</div>
     <div class="sec" style="gap:8px"><h3>Materiales</h3>${chips('mat:'+a)}</div>
     ${AREAS[a].tec?std(a):''}</div></details>`;
-  return `<h1>Configuración</h1>${apar}
+  return `<h1>Configuración</h1>${apar}${comp}
   <div class="bloque"><h2>Semáforo</h2><form data-form="semaforo" class="sec"><div class="dos"><label>Amarillo hasta (% sobre el mínimo)<input name="amarilloPct" id="sm-a" inputmode="decimal" value="${S.cfg.amarilloPct}"></label><label>Rojo hasta (% sobre el mínimo)<input name="rojoPct" id="sm-r" inputmode="decimal" value="${S.cfg.rojoPct}"></label></div>
     <small class="tenue">Ejemplo con mínimo 100: rojo hasta ${fmt(100+S.cfg.rojoPct)}, amarillo hasta ${fmt(100+S.cfg.amarilloPct)}, verde por encima.</small><div class="err" id="sm-err"></div><button class="pri" style="align-self:flex-start">Guardar</button></form></div>
   <div class="bloque"><h2>Valor del dólar</h2><form data-form="dolar" class="sec"><label>Pesos por cada dólar ($ / USD)<input name="dolar" id="cf-dolar" inputmode="decimal" value="${S.cfg.dolar||''}" placeholder="Sin cargar"></label>
@@ -847,7 +909,7 @@ document.addEventListener('click',async e=>{
     dif.forEach(id=>{const dd=difConteo(id);DB.mov(item(id),dd>0?'entrada':'salida',Math.abs(dd),'Relevamiento de stock','',{})});
     S.conteo=null;render();toast(dif.length?dif.length+' ítem(s) ajustados':'Relevamiento guardado sin cambios');
   }
-  else if(act==='tab'){if(S.sel&&S.sel.area!==d.v)S.sel=null;S.tab=d.v;render();scrollTo(0,0)}
+  else if(act==='tab')irA(d.v);
   else if(act==='ver'){d.id?verItem(d.id):cerrar()}
   else if(act==='cerrar')cerrar();
   else if(act==='nuevo')formItem(d.v);
@@ -897,6 +959,11 @@ document.addEventListener('click',async e=>{
   else if(act==='quitarUsuario'){if(await confirmar('¿Quitar el acceso de '+d.v+'?','Quitar'))DB.usuario(d.v,null)}
   else if(act==='salir')DB.salir();
   else if(act==='acento'){ponerAcento(d.v,true);render()}
+  else if(act==='compartir'){if(navigator.share){try{await navigator.share({title:'StockApp',text:'StockApp – control de stock de planta',url:URLAPP})}catch(e){}}else{try{await navigator.clipboard.writeText(URLAPP);toast('Link copiado')}catch(e){toast('Copiá el link de arriba')}}}
+  else if(act==='whatsapp')window.open('https://wa.me/?text='+encodeURIComponent('StockApp – control de stock de planta: '+URLAPP),'_blank');
+  else if(act==='copiarLink'){try{await navigator.clipboard.writeText(URLAPP);toast('Link copiado')}catch(e){toast('Copiá el link de arriba')}}
+  else if(act==='verQR'){const c=$('#qr-caja');if(!c)return;if(c.firstChild){c.innerHTML='';return}
+    try{if(!window.QRCode)await cargar('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');c.innerHTML='<div class="qr"></div><small class="tenue">Escanealo con la cámara del celular.</small>';new QRCode(c.firstChild,{text:URLAPP,width:200,height:200,colorDark:'#12161b',colorLight:'#ffffff'})}catch(e){toast('No se pudo generar el QR sin conexión')}}
   else if(act==='reiniciarDemo'){if(await confirmar('¿Volver a los datos de ejemplo?','Restablecer'))DB.reiniciar()}
   else if(act==='login')DB.login();
   else if(act==='olvide'){const m=($('#l-email').value||'').trim();if(!m){$('#l-err').textContent='Escribí tu correo y volvé a tocar el enlace.';return}DB.reset(m)}
