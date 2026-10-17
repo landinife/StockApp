@@ -34,6 +34,13 @@ service cloud.firestore {
       return stockAdmin() || (stockOk() &&
         get(/databases/$(database)/documents/stockapp_usuarios/$(request.auth.token.email)).data.editor == true);
     }
+    // ===== NUEVO (ComprasApp): usuarios de StockApp con la casilla "Compras" =====
+    function comprasOk() {
+      return stockAdmin() || (request.auth != null &&
+        exists(/databases/$(database)/documents/stockapp_usuarios/$(request.auth.token.email)) &&
+        get(/databases/$(database)/documents/stockapp_usuarios/$(request.auth.token.email)).data.get('compras', false) == true);
+    }
+    // ===== FIN NUEVO =====
     match /stockapp_usuarios/{email} {
       allow read: if stockOk();
       allow write: if stockAdmin();
@@ -42,12 +49,22 @@ service cloud.firestore {
       allow read: if stockOk();
       allow write: if stockEditor();
     }
+    // ===== NUEVO (ComprasApp): contador de códigos compartido =====
+    match /stockapp_config/codigos {
+      allow write: if comprasOk();
+    }
+    // ===== FIN NUEVO =====
     match /stockapp_items/{doc} {
       allow read: if stockOk();
       allow create, delete: if stockEditor();
+      // NUEVO (ComprasApp): alta de materiales desde una OC
+      allow create: if comprasOk();
       // Sin permiso de edición solo se puede mover stock y marcar pedidos.
       allow update: if stockEditor() || (stockOk() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'reservas']));
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'reservas']))
+        // NUEVO (ComprasApp): ingreso por recepción, pedido en curso y costo
+        || (comprasOk() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'costo', 'moneda']));
     }
     match /stockapp_movimientos/{doc} {
       allow read, create: if stockOk();
@@ -58,5 +75,13 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ===== NUEVO: ComprasApp =====
+    match /compras_config/{doc}       { allow read, write: if comprasOk(); }
+    match /compras_oc/{id}            { allow read, create, update: if comprasOk(); allow delete: if stockAdmin(); }
+    match /compras_proveedores/{id}   { allow read, write: if comprasOk(); }
+    match /compras_contadores/{id}    { allow read, write: if comprasOk(); }
+    match /compras_recepciones/{id}   { allow read, create, update: if comprasOk(); allow delete: if stockAdmin(); }
+    match /compras_precios/{id}       { allow read, write: if comprasOk(); }
+    // ===== FIN ComprasApp =====
   }
 }

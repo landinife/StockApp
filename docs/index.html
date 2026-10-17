@@ -443,10 +443,11 @@ function medidas(it){
   if(m.diametro)p.push('Ø '+fmt(m.diametro)); if(m.espesor)p.push(fmt(m.espesor)); if(m.ancho)p.push(fmt(m.ancho)); if(m.largo)p.push(fmt(m.largo));
   return [it.subId?'':it.formato,it.material,p.length?p.join(' × ')+' mm':''].filter(Boolean).join(' · ');
 }
-function sigCodigo(area){
-  const p=AREAS[area].p;let max=0;
-  S.items.forEach(i=>{if(i.area===area){const n=parseInt(String(i.codigo).split('-')[1]);if(n>max)max=n}});
-  return p+'-'+String(max+1).padStart(4,'0');
+function maxCodigo(area){ // número más alto ya usado en la sección
+  let max=0;S.items.forEach(i=>{if(i.area===area){const n=parseInt(String(i.codigo).split('-')[1]);if(n>max)max=n}});return max;
+}
+function sigCodigo(area){ // solo para mostrar el próximo código y para los datos de ejemplo
+  return AREAS[area].p+'-'+String(maxCodigo(area)+1).padStart(4,'0');
 }
 function opciones(lista,sel,vacio){return (vacio!=null?`<option value="">${esc(vacio)}</option>`:'')+lista.map(o=>{const v=typeof o==='string'?o:o.id,n=typeof o==='string'?o:o.nombre;return `<option value="${esc(v)}"${v===sel?' selected':''}>${esc(n)}</option>`}).join('')}
 const enUso=campo=>[...new Set(S.items.map(i=>i[campo]).filter(Boolean))];
@@ -729,15 +730,15 @@ function formLote(){
 function opcLoteCat(dest,orig){ // en la misma pestaña se puede dejar igual; al mover, hay que elegir
   return (dest===orig?'<option value="">No cambiar</option>':'')+'<option value="__no">Sin categoría</option>'+opciones(cats(dest),dest===orig?'':'__no');
 }
-function aplicarLote(d){
+async function aplicarLote(d){
   const a0=S.sel.area,dest=d.area,mueve=dest!==a0,its=[...S.sel.ids].map(item).filter(Boolean),p={};
   if(d.catId)p.catId=d.catId==='__no'?'':d.catId,p.subId=d.subId&&d.subId!=='__no'?d.subId:'';else if(mueve)p.catId='',p.subId='';
   ['marca','proveedor','ubicacion'].forEach(k=>{const v=(d[k]||'').trim();if(v)p[k]=v});const mt=matElegido(d);if(mt)p.material=mt;
   if(d.unidad)p.unidad=d.unidad;
   for(const k of ['minimo','cantPedido','plazo']){const t=(d[k]||'').trim();if(t!==''){const v=num(t);if(v<0||!/^\d+([.,]\d+)?$/.test(t)){$('#l-err').textContent='Revisá los números: tienen que ser cero o positivos.';return}p[k]=k==='plazo'?Math.round(v):v}}
   if(!mueve&&!Object.keys(p).length){$('#l-err').textContent='Completá al menos un campo para cambiar.';return}
-  let c=0;if(mueve)S.items.forEach(i=>{if(i.area===dest){const k=parseInt(String(i.codigo).split('-')[1]);if(k>c)c=k}});
-  its.forEach(it=>{const q=Object.assign({actualizado:Date.now()},p);if(mueve){q.area=dest;q.codigo=AREAS[dest].p+'-'+String(++c).padStart(4,'0')}DB.guardarItem(it.id,q)});
+  let cods=[];if(mueve){try{cods=await DB.sigCodigos(dest,its.length)}catch(e){$('#l-err').textContent='No se pudieron asignar los códigos (¿sin conexión?). Probá de nuevo.';return}}
+  its.forEach((it,k)=>{const q=Object.assign({actualizado:Date.now()},p);if(mueve){q.area=dest;q.codigo=cods[k]}DB.guardarItem(it.id,q)});
   aprender(dest,p);const n=its.length;
   if(mueve)S.sel.ids.clear();cerrar();renderLista();toast(n+' ítem'+(n===1?'':'s')+' actualizado'+(n===1?'':'s')+(mueve?' y movido'+(n===1?'':'s')+' a '+AREAS[dest].n:''));
 }
@@ -1009,8 +1010,10 @@ document.addEventListener('submit',e=>{
     if(AREAS[d.area].tec){const sc=(cats(d.area).find(x=>x.id===d.catId)||{subs:[]}).subs.find(x=>x.id===d.subId);base.formato=sc?sc.nombre:'';base.medidas={espesor:num(d.espesor),diametro:num(d.diametro),ancho:num(d.ancho),largo:num(d.largo)}}
     const ns=num(d.stock);if(String(d.stock||'').trim()!==''&&!/^\d+([.,]\d+)?$/.test(String(d.stock).trim())){$('#i-err').textContent='Revisá el stock actual: tiene que ser un número.';return}
     if(d.id){const it0=item(d.id),df=Math.round((ns-it0.stock)*1000)/1000;DB.guardarItem(d.id,base);if(df)DB.mov(item(d.id),df>0?'entrada':'salida',Math.abs(df),'Ajuste de inventario','Edición del ítem',{});cerrar();verItem(d.id);toast(df?'Cambios guardados y stock ajustado':'Cambios guardados')}
-    else{const ini=num(d.stock);Object.assign(base,{area:d.area,codigo:sigCodigo(d.area),stock:0,pedidoCurso:null,creado:Date.now()});
-      const id=DB.guardarItem(null,base);if(ini>0)DB.mov(Object.assign({id},base),'entrada',ini,'Stock inicial','',{});cerrar();toast('Ítem '+base.codigo+' creado')}
+    else{const ini=num(d.stock);
+      DB.sigCodigos(d.area,1).then(([cod])=>{Object.assign(base,{area:d.area,codigo:cod,stock:0,pedidoCurso:null,creado:Date.now()});
+        const id=DB.guardarItem(null,base);if(ini>0)DB.mov(Object.assign({id},base),'entrada',ini,'Stock inicial','',{});cerrar();toast('Ítem '+base.codigo+' creado')})
+      .catch(()=>{$('#i-err').textContent='No se pudo asignar el código (¿sin conexión?). Probá de nuevo.'})}
   }else if(tipo==='mov'){
     const it=item(d.id),c=num(d.cantidad);
     if(c<=0){$('#mv-err').textContent='Ingresá una cantidad mayor que cero.';return}
@@ -1124,6 +1127,7 @@ function demoDB(){
   return {
     start(){try{D=JSON.parse(localStorage.getItem(K))}catch(_){D=null}
       if(D&&D.cfg){S.items=D.items;S.movs=D.movs;S.cfg=D.cfg=normCfg(D.cfg)}else ejemplo();render()},
+    async sigCodigos(area,cant){let m=maxCodigo(area);return Array.from({length:cant},()=>AREAS[area].p+'-'+String(++m).padStart(4,'0'))},
     guardarItem(id,data){if(id)Object.assign(item(id),data);else{id=uid();S.items.push(Object.assign({id},data))}guardar();alDato();return id},
     patchItem(id,p){Object.assign(item(id),p);guardar();alDato()},
     borrarItem(id){S.items.splice(S.items.findIndex(i=>i.id===id),1);guardar();alDato()},
@@ -1172,6 +1176,11 @@ function fireDB(){
       const r=await ap.auth().createUserWithEmailAndPassword(email,clave);await r.user.updateProfile({displayName:nombre});await ap.auth().signOut();
       await fs.collection('stockapp_usuarios').doc(email).set({nombre,rol:'usuario',editor:false,alta:Date.now()});},
     salir(){au.signOut()},
+    // Códigos con contador compartido con ComprasApp (transacción: nunca se repiten)
+    async sigCodigos(area,cant){const p=AREAS[area].p,ref=fs.doc('stockapp_config/codigos');let l=[];
+      await fs.runTransaction(async tx=>{const c=await tx.get(ref);let n=Math.max((c.exists&&c.data()[p])||0,maxCodigo(area));
+        l=Array.from({length:cant},()=>p+'-'+String(++n).padStart(4,'0'));tx.set(ref,{[p]:n},{merge:true})});
+      return l},
     guardarItem(id,data){const r=id?fs.collection('stockapp_items').doc(id):fs.collection('stockapp_items').doc();(id?r.update(data):r.set(data)).catch(fallo);return r.id},
     patchItem(id,p){fs.collection('stockapp_items').doc(id).update(p).catch(fallo)},
     borrarItem(id){fs.collection('stockapp_items').doc(id).delete().catch(fallo)},
