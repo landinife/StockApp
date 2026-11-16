@@ -148,7 +148,7 @@ label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--tenu
 .otra svg{width:30px;height:30px;display:block;border-radius:7px}
 
 /* ---------- Navegación: barra de abajo (teléfono) y barra lateral (PC) ---------- */
-.nav{position:fixed;left:0;right:0;bottom:0;z-index:7;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:7;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
   padding-bottom:var(--inf);background:rgba(16,21,28,.72);backdrop-filter:var(--vidrio);-webkit-backdrop-filter:var(--vidrio);
   border-top:1px solid var(--linea);box-shadow:0 -10px 30px rgba(0,0,0,.28)}
 .nav button,.nav button:hover{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
@@ -161,6 +161,19 @@ label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--tenu
 .nav button.on svg{color:var(--acento)}
 .nav .cuenta{position:absolute;top:5px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700}
 .nav button.sc,.nav button.sc:hover,.nav .sep{display:none} /* las secciones y el separador se ven solo en la PC */
+.nav button.pc,.nav button.pc:hover{display:none} /* Entrada, Salida y Compras: en el teléfono van dentro de Acciones */
+.nav button.on.fuera,.nav button.on.fuera:hover{background:none;color:var(--tenue)} /* dentro de un depósito, Inicio no queda marcado */
+.nav button.on.fuera svg{color:inherit}
+
+/* ---------- Hojas del teléfono: Depósitos y Acciones ---------- */
+.opcs{display:flex;flex-direction:column;gap:8px}
+button.opc,button.opc:hover{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:9px 12px;text-align:left;font-size:17px;border-radius:var(--r);border:1px solid var(--linea);background:var(--panel);box-shadow:var(--sh)}
+button.opc:hover{background:var(--panel2)}
+button.opc.act{box-shadow:inset 0 0 0 2px var(--acento)}
+.opc .tx{display:flex;flex-direction:column;gap:3px;min-width:0;font:600 20px var(--f-tit);letter-spacing:.03em}
+.opc .tx small{font:400 13px var(--f-cuerpo);letter-spacing:0;color:var(--tenue)}
+.opc .sb{display:flex;flex-wrap:wrap;gap:4px}
+.opc .mi{width:40px;height:40px;margin:0} .opc .mi svg{width:22px;height:22px}
 
 /* ---------- Inicio: Entrada/Salida rápida (solo PC), secciones e indicadores ---------- */
 .rapidos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -334,7 +347,7 @@ details>.sec{margin-top:12px;gap:16px}
 @media (max-width:699px){.secciones .secc:last-child:nth-child(odd){grid-column:1/-1}}
 @media (max-width:899px){
   .solo-pc{display:none}
-  .rapidos{display:none} /* en el teléfono Entrada, Salida y Compras ya están en la barra de abajo */
+  .rapidos{display:none} /* en el teléfono Entrada, Salida y Compras ya están en Acciones, en la barra de abajo */
   body:has(.barra) #toast{bottom:calc(var(--alto-nav) + var(--inf) + 132px)} /* el aviso no tapa la barra de selección */
 }
 @media (min-width:700px){.secciones{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -349,7 +362,8 @@ details>.sec{margin-top:12px;gap:16px}
   .nav button,.nav button:hover{flex:none;flex-direction:row;justify-content:flex-start;gap:14px;width:100%;height:42px;padding:0 10px;font-size:14px;white-space:nowrap;text-align:left}
   .nav button:hover{background:var(--boton);color:var(--texto)}
   .nav button.on,.nav button.on:hover{background:color-mix(in srgb,var(--acento) 20%,transparent)}
-  .nav button.sc,.nav button.sc:hover{display:flex} /* en PC las secciones sí se ven */
+  .nav button.sc,.nav button.sc:hover,.nav button.pc,.nav button.pc:hover{display:flex} /* en PC las secciones, Entrada, Salida y Compras sí se ven */
+  .nav button.mv,.nav button.mv:hover{display:none} /* Depósitos y Acciones son solo del teléfono */
   .nav button.sc svg{color:var(--c)} /* cada sección con el color de sus tarjetas */
   .nav .sep{display:block;flex:none;height:1px;margin:6px 8px;background:var(--linea)}
   .nav button.on.fuera{background:none;color:var(--tenue)} /* dentro de una sección, Inicio no queda marcado */
@@ -514,21 +528,40 @@ const listaCfg=(k,campo)=>[...new Set([...(S.cfg[k]||[]),...enUso(campo)])].sort
 
 /* ---------- Navegación: inicio con secciones; Atrás vuelve al inicio ---------- */
 function ponerTab(v){if(S.sel&&S.sel.area!==v)S.sel=null;S.tab=v;render();scrollTo(0,0)}
-function irA(v){
-  if(v===S.tab)return;
-  if(v==='resumen'&&history.state&&history.state.stockTab){history.back();return}
-  // desde Inicio se suma un paso al historial; entre secciones se reemplaza, así Inicio y Atrás vuelven siempre en un solo paso
-  try{history[S.tab==='resumen'?'pushState':'replaceState']({stockTab:v},'')}catch(e){}
-  ponerTab(v);
+/* ---------- Botón Atrás del teléfono ----------
+   El historial del navegador ya no se usa para moverse por la app: se deja una entrada "guardia" por delante
+   y cada toque en Atrás se resuelve acá: cierra la ventana abierta (o vuelve a la anterior), después vuelve a Inicio,
+   y estando en Inicio pide tocar Atrás otra vez para salir. */
+const GUARDIA='stockGuardia';let salirT=0;
+function irA(v){if(v!==S.tab)ponerTab(v)}
+function armarGuardia(){ // en el primer toque: deja una entrada de más para atrapar Atrás (el navegador la ignora si no hubo un toque antes)
+  try{if(!(history.state&&history.state[GUARDIA]===1)){history.replaceState({[GUARDIA]:0},'');history.pushState({[GUARDIA]:1},'')}}catch(e){}
 }
-addEventListener('popstate',e=>{if(!S.cfg)return;if(!$('#m1').hidden&&typeof cerrar==='function')cerrar();ponerTab((e.state&&e.state.stockTab)||'resumen')});
+addEventListener('pointerdown',armarGuardia,{once:true,capture:true});
+function atrasVentana(){ // Atrás dentro de una ventana: vuelve a la ventana anterior si la hay; si no, la cierra
+  const m=$('#m1'),f=m.querySelector('[data-form]'),inp=f&&f.querySelector('[name=id]'),id=inp?inp.value:'';
+  if(S.desdeCompras&&m.querySelector('[data-detalle]'))return modalCompras();
+  if(f&&id&&item(id)&&['item','reserva','pedido','hist'].includes(f.dataset.form))return verItem(id);
+  if(f&&f.dataset.form==='mov'){const vu=f.querySelector('[name=vuelve]').value;if(vu==='r')return modalRapido(f.querySelector('[name=tipo]').value);if(vu&&item(id))return verItem(id)}
+  cerrar();
+}
+addEventListener('popstate',e=>{
+  if(e.state&&e.state[GUARDIA]===1)return; // volvimos a la entrada de adelante: no hay nada que resolver
+  if(!S.cfg){history.back();return} // sin sesión iniciada, Atrás sale como siempre
+  if(!$('#m2').hidden)cerrar('#m2');
+  else if(!$('#m1').hidden)atrasVentana();
+  else if(S.tab!=='resumen')ponerTab('resumen');
+  else if(Date.now()-salirT<2500){history.back();return} // segundo Atrás seguido en Inicio: sale de la app
+  else{salirT=Date.now();toast('Tocá Atrás otra vez para salir')}
+  try{history.pushState({[GUARDIA]:1},'')}catch(err){} // vuelve a dejar la guardia
+});
 const URLAPP=/github\.io$/.test(location.hostname)?location.origin+location.pathname:'https://landinife.github.io/StockApp/';
 
 /* ---------- Encabezado y navegación (tema vidrio, igual en StockApp, ComprasApp y ProducciónApp) ---------- */
 // Las otras dos apps de trabajo: dirección e ícono real (icon.svg de su repositorio), dibujado acá para que funcione sin conexión
 const OTRAS=[{n:'ComprasApp',u:'https://landinife.github.io/ComprasApp/',i:'<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="oc-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#253040"/><stop offset="1" stop-color="#121820"/></linearGradient><linearGradient id="oc-a" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#3d9be8"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#oc-g)"/><path d="M156 84h140l96 96v224a24 24 0 0 1-24 24H156a24 24 0 0 1-24-24V108a24 24 0 0 1 24-24z" fill="#1c232b" stroke="#3d4a5a" stroke-width="10" stroke-linejoin="round"/><path d="M296 84v72a24 24 0 0 0 24 24h72" fill="none" stroke="#3d4a5a" stroke-width="10" stroke-linejoin="round"/><rect x="170" y="214" width="184" height="34" rx="13" fill="url(#oc-a)"/><rect x="170" y="274" width="134" height="34" rx="13" fill="#efc145"/><rect x="170" y="334" width="92" height="34" rx="13" fill="#ff6f61"/><circle cx="372" cy="392" r="66" fill="#141a22" stroke="#3fca8b" stroke-width="12"/><path d="M342 394l22 22 40-48" fill="none" stroke="#3fca8b" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/></svg>'},
   {n:'ProducciónApp',u:'https://landinife.github.io/ProduccionApp/',i:'<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="op-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#253040"/><stop offset="1" stop-color="#121820"/></linearGradient><linearGradient id="op-a" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#3d9be8"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#op-g)"/><g transform="translate(0.0 0.0) scale(1.0)"><rect x="76" y="96" width="360" height="320" rx="34" fill="#1c232b" stroke="#3d4a5a" stroke-width="10"/><path d="M76 168H436" stroke="#3d4a5a" stroke-width="10"/><circle cx="122" cy="132" r="13" fill="#3fca8b"/><circle cx="162" cy="132" r="13" fill="#efc145"/><circle cx="202" cy="132" r="13" fill="#ff6f61"/><g stroke="rgba(144,160,176,.22)" stroke-width="6"><path d="M196 178V406M316 178V406"/></g><rect x="110" y="200" width="170" height="40" rx="14" fill="url(#op-a)"/><rect x="196" y="264" width="190" height="40" rx="14" fill="#efc145"/><rect x="150" y="328" width="130" height="40" rx="14" fill="#3fca8b"/><path d="M300 186V398" stroke="#ff6f61" stroke-width="8" stroke-linecap="round"/></g></svg>'}];
-const IC_NAV={inicio:'<path d="M4 11l8-7 8 7M6 9.5V20h4.5v-5.5h3V20H18V9.5"/>'};
+const IC_NAV={inicio:'<path d="M4 11l8-7 8 7M6 9.5V20h4.5v-5.5h3V20H18V9.5"/>',dep:'<path d="M3 21V9l9-5 9 5v12M7 21v-7h10v7M7 17.5h10"/>',acc:'<path d="M7 9h13l-4-4M17 15H4l4 4"/>'};
 function vCab(){ // barra de vidrio de arriba: nombre de la app y accesos a las otras dos
   return `<header class="cab"><div class="izq"><button class="marca" data-act="tab" data-v="resumen" aria-label="StockApp, ir al inicio"><span>Stock<b>App</b></span></button></div><div class="der2"><small class="tenue usr">${esc(S.user.nombre||S.user.email)}</small>${OTRAS.map(o=>`<a class="otra" href="${o.u}" aria-label="Abrir ${o.n}" title="Abrir ${o.n}">${o.i}</a>`).join('')}</div></header>`;
 }
@@ -537,9 +570,21 @@ function vNav(){ // barra de navegación: abajo en el teléfono, al costado en l
   const cfg=S.tab==='config',enSec=!!AREAS[S.tab],n=pendCompras(),
     b=(at,ico,t,on,ex,cl)=>`<button ${at}${on||cl?` class="${[on?'on':'',cl||''].join(' ').trim()}"`:''}${on?' aria-current="page"':''}><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg><span class="tl">${t}</span>${ex||''}</button>`,
     secs=Object.keys(AREAS).map(a=>b(`data-act="tab" data-v="${a}" style="--c:var(--c-${a})"`,ICONOS[a],AREAS[a].n,S.tab===a,'','sc')).join('');
-  return `<nav class="nav" aria-label="Navegación">${b('data-act="tab" data-v="resumen"',IC_NAV.inicio,'Inicio',!cfg,'',enSec?'fuera':'')}${secs}<i class="sep"></i>${b('data-act="rapido" data-v="entrada"',IC.entrada,'Entrada')}${b('data-act="rapido" data-v="salida"',IC.salida,'Salida')}${b('data-act="compras"',IC.compras,'Compras',0,`<b class="cuenta" id="nav-c"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`)}${b('data-act="tab" data-v="config"',ICONOS.config,'Configuración',cfg).replace('<span class="tl">Configuración</span>','<span class="tl larga">Configuración</span><span class="tl corta">Config.</span>')}</nav>`;
+  return `<nav class="nav" aria-label="Navegación">${b('data-act="tab" data-v="resumen"',IC_NAV.inicio,'Inicio',!cfg,'',enSec?'fuera':'')}${secs}<i class="sep"></i>${b('data-act="sheetDep"',IC_NAV.dep,'Depósitos',enSec,'','mv')}${b('data-act="sheetAcc"',IC_NAV.acc,'Acciones',0,`<b class="cuenta" id="nav-c2"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`,'mv')}${b('data-act="rapido" data-v="entrada"',IC.entrada,'Entrada',0,'','pc')}${b('data-act="rapido" data-v="salida"',IC.salida,'Salida',0,'','pc')}${b('data-act="compras"',IC.compras,'Compras',0,`<b class="cuenta" id="nav-c"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`,'pc')}${b('data-act="tab" data-v="config"',ICONOS.config,'Configuración',cfg).replace('<span class="tl">Configuración</span>','<span class="tl larga">Configuración</span><span class="tl corta">Config.</span>')}</nav>`;
 }
-function pintaNavCuenta(){const e=$('#nav-c');if(!e)return;const n=pendCompras();e.textContent=n;e.hidden=!n} // actualiza el contador de Compras sin redibujar
+function pintaNavCuenta(){const n=pendCompras();['nav-c','nav-c2'].forEach(k=>{const e=document.getElementById(k);if(e){e.textContent=n;e.hidden=!n}})} // actualiza el contador de Compras (y el de Acciones) sin redibujar
+function hojaDepositos(){ // hoja del teléfono: los 5 depósitos, cada uno con su ícono y su color
+  const f=Object.keys(AREAS).map(a=>{const l=S.items.filter(i=>i.area===a),r=l.filter(i=>estado(i)==='rojo').length,y=l.filter(i=>estado(i)==='amarillo').length;
+    return `<button class="opc${S.tab===a?' act':''}" data-act="irDep" data-v="${a}">${tile(a)}<span class="tx">${AREAS[a].n}<small>${l.length} ítem${l.length===1?'':'s'}</small>${r||y?`<span class="sb">${r?`<span class="pil rojo">${r} en mínimo</span>`:''}${y?`<span class="pil amarillo">${y} por agotarse</span>`:''}</span>`:''}</span></button>`}).join('');
+  abrir(`<div class="entre"><h2>Depósitos</h2><button class="chico" data-act="cerrar">Cerrar</button></div><div class="opcs">${f}</div>`);
+}
+function hojaAcciones(){ // hoja del teléfono: Entrada, Salida y Lista de compras
+  const n=pendCompras();
+  abrir(`<div class="entre"><h2>Acciones</h2><button class="chico" data-act="cerrar">Cerrar</button></div><div class="opcs">
+    <button class="opc" data-act="rapido" data-v="entrada"><span class="mi e">${ic('entrada')}</span><span class="tx">Entrada<small>Registrar mercadería que ingresa</small></span></button>
+    <button class="opc" data-act="rapido" data-v="salida"><span class="mi s">${ic('salida')}</span><span class="tx">Salida<small>Registrar lo que sale a producción</small></span></button>
+    <button class="opc" data-act="compras"><span class="mi" style="background:var(--azul-f);color:var(--acento)">${ic('compras')}</span><span class="tx">Lista de compras<small>${n?n+' para pedir':'Nada pendiente de pedir'}</small></span>${n?`<b class="cuenta" style="margin-left:auto">${n}</b>`:''}</button></div>`);
+}
 
 /* ---------- Pantallas ---------- */
 function render(){
@@ -598,7 +643,7 @@ function vResumen(){
   ${det}
   <div class="sec"><input id="g-q" type="search" placeholder="Buscar en todo el stock" value="${esc(S.gq)}" autocomplete="off" aria-label="Buscar en todo el stock"><div id="g-res">${resBusqueda()}</div></div>
   <div class="rapidos"><button class="ent" data-act="rapido" data-v="entrada">${ic('entrada')}Entrada</button><button class="sal" data-act="rapido" data-v="salida">${ic('salida')}Salida</button><button class="comp" data-act="compras">${ic('compras')}Lista de compras${pend?` <b class="cuenta">${pend}</b>`:''}</button></div>
-  <div class="sec"><h2>Secciones</h2><div class="secciones">${secc}</div></div>
+  <div class="sec solo-pc"><h2>Secciones</h2><div class="secciones">${secc}</div></div>
   ${valor}
   <div class="sec"><div class="entre"><h2>Últimos movimientos</h2><button class="chico" data-act="historial">Ver historial</button></div>
     ${S.movs.length?`<div class="lista">${S.movs.slice(0,10).map(m=>filaMov(m,true,1)).join('')}</div>`:`<div class="vacio">Todavía no hay movimientos.</div>`}</div>`;
@@ -1017,6 +1062,9 @@ document.addEventListener('click',async e=>{
   else if(act==='filtros'){S.fAbierto=!S.fAbierto;const w=$('.filtros');if(w)w.classList.toggle('abierto',S.fAbierto);b.setAttribute('aria-expanded',S.fAbierto)}
   else if(act==='ver'){if(d.v==='compras')S.desdeCompras=true;d.id?verItem(d.id):cerrar()}
   else if(act==='compras')modalCompras();
+  else if(act==='sheetDep')hojaDepositos();
+  else if(act==='sheetAcc')hojaAcciones();
+  else if(act==='irDep'){cerrar();irA(d.v)}
   else if(act==='cerrarM2')cerrar('#m2');
   else if(act==='cerrar')cerrar();
   else if(act==='nuevo')formItem(d.v);
