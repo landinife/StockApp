@@ -517,7 +517,8 @@ function ponerTab(v){if(S.sel&&S.sel.area!==v)S.sel=null;S.tab=v;render();scroll
 function irA(v){
   if(v===S.tab)return;
   if(v==='resumen'&&history.state&&history.state.stockTab){history.back();return}
-  try{history.pushState({stockTab:v},'')}catch(e){}
+  // desde Inicio se suma un paso al historial; entre secciones se reemplaza, así Inicio y Atrás vuelven siempre en un solo paso
+  try{history[S.tab==='resumen'?'pushState':'replaceState']({stockTab:v},'')}catch(e){}
   ponerTab(v);
 }
 addEventListener('popstate',e=>{if(!S.cfg)return;if(!$('#m1').hidden&&typeof cerrar==='function')cerrar();ponerTab((e.state&&e.state.stockTab)||'resumen')});
