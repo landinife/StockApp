@@ -160,6 +160,7 @@ label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--tenu
 .nav button.on{background:color-mix(in srgb,var(--acento) 16%,transparent);color:var(--texto)}
 .nav button.on svg{color:var(--acento)}
 .nav .cuenta{position:absolute;top:5px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700}
+.nav button.sc,.nav button.sc:hover,.nav .sep{display:none} /* las secciones y el separador se ven solo en la PC */
 
 /* ---------- Inicio: Entrada/Salida rápida (solo PC), secciones e indicadores ---------- */
 .rapidos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -348,6 +349,12 @@ details>.sec{margin-top:12px;gap:16px}
   .nav button,.nav button:hover{flex:none;flex-direction:row;justify-content:flex-start;gap:14px;width:100%;height:42px;padding:0 10px;font-size:14px;white-space:nowrap;text-align:left}
   .nav button:hover{background:var(--boton);color:var(--texto)}
   .nav button.on,.nav button.on:hover{background:color-mix(in srgb,var(--acento) 20%,transparent)}
+  .nav button.sc,.nav button.sc:hover{display:flex} /* en PC las secciones sí se ven */
+  .nav button.sc svg{color:var(--c)} /* cada sección con el color de sus tarjetas */
+  .nav .sep{display:block;flex:none;height:1px;margin:6px 8px;background:var(--linea)}
+  .nav button.on.fuera{background:none;color:var(--tenue)} /* dentro de una sección, Inicio no queda marcado */
+  .nav button.on.fuera:hover{background:var(--boton);color:var(--texto)}
+  .nav button.on.fuera svg{color:inherit}
   .nav .tl{opacity:0;transform:translateX(-8px);transition:opacity .18s,transform .25s}
   .nav:hover .tl,.nav:has(:focus-visible) .tl{opacity:1;transform:none;transition-delay:.1s}
   .nav .cuenta{top:2px;left:24px}
@@ -525,9 +532,11 @@ function vCab(){ // barra de vidrio de arriba: nombre de la app y accesos a las 
   return `<header class="cab"><div class="izq"><button class="marca" data-act="tab" data-v="resumen" aria-label="StockApp, ir al inicio"><span>Stock<b>App</b></span></button></div><div class="der2"><small class="tenue usr">${esc(S.user.nombre||S.user.email)}</small>${OTRAS.map(o=>`<a class="otra" href="${o.u}" aria-label="Abrir ${o.n}" title="Abrir ${o.n}">${o.i}</a>`).join('')}</div></header>`;
 }
 const pendCompras=()=>compras().filter(i=>!i.pedidoCurso).length; // ítems en mínimo que falta pedir
-function vNav(){ // barra de navegación: abajo en el teléfono, al costado en la PC. Inicio queda marcado también dentro de una sección
-  const cfg=S.tab==='config',n=pendCompras(),b=(at,ico,t,on,ex)=>`<button ${at}${on?' class="on" aria-current="page"':''}><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg><span class="tl">${t}</span>${ex||''}</button>`;
-  return `<nav class="nav" aria-label="Navegación">${b('data-act="tab" data-v="resumen"',IC_NAV.inicio,'Inicio',!cfg)}${b('data-act="rapido" data-v="entrada"',IC.entrada,'Entrada')}${b('data-act="rapido" data-v="salida"',IC.salida,'Salida')}${b('data-act="compras"',IC.compras,'Compras',0,`<b class="cuenta" id="nav-c"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`)}${b('data-act="tab" data-v="config"',ICONOS.config,'Configuración',cfg).replace('<span class="tl">Configuración</span>','<span class="tl larga">Configuración</span><span class="tl corta">Config.</span>')}</nav>`;
+function vNav(){ // barra de navegación: abajo en el teléfono, al costado en la PC. Las secciones se ven solo en la PC
+  const cfg=S.tab==='config',enSec=!!AREAS[S.tab],n=pendCompras(),
+    b=(at,ico,t,on,ex,cl)=>`<button ${at}${on||cl?` class="${[on?'on':'',cl||''].join(' ').trim()}"`:''}${on?' aria-current="page"':''}><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg><span class="tl">${t}</span>${ex||''}</button>`,
+    secs=Object.keys(AREAS).map(a=>b(`data-act="tab" data-v="${a}" style="--c:var(--c-${a})"`,ICONOS[a],AREAS[a].n,S.tab===a,'','sc')).join('');
+  return `<nav class="nav" aria-label="Navegación">${b('data-act="tab" data-v="resumen"',IC_NAV.inicio,'Inicio',!cfg,'',enSec?'fuera':'')}${secs}<i class="sep"></i>${b('data-act="rapido" data-v="entrada"',IC.entrada,'Entrada')}${b('data-act="rapido" data-v="salida"',IC.salida,'Salida')}${b('data-act="compras"',IC.compras,'Compras',0,`<b class="cuenta" id="nav-c"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`)}${b('data-act="tab" data-v="config"',ICONOS.config,'Configuración',cfg).replace('<span class="tl">Configuración</span>','<span class="tl larga">Configuración</span><span class="tl corta">Config.</span>')}</nav>`;
 }
 function pintaNavCuenta(){const e=$('#nav-c');if(!e)return;const n=pendCompras();e.textContent=n;e.hidden=!n} // actualiza el contador de Compras sin redibujar
 
