@@ -265,6 +265,14 @@ td.n,th.n{text-align:right}
 tbody tr{cursor:pointer}
 tbody tr:nth-child(even) td{background:rgba(255,255,255,.025)}
 tbody tr:hover td{background:color-mix(in srgb,var(--acento) 9%,transparent)}
+/* títulos de grupo (categoría y subcategoría) en la lista de cada sección */
+.grp{display:flex;align-items:baseline;gap:8px;margin-top:8px;padding-bottom:4px;border-bottom:1px solid var(--linea);font:600 19px var(--f-tit);letter-spacing:.03em}
+.grp small{font:400 13px var(--f-cuerpo);letter-spacing:0;color:var(--tenue)}
+.grp.sub{margin:0 0 0 10px;border-bottom:0;font-size:16px;color:var(--tenue)}
+tbody tr.grp,tbody tr.grp:hover{cursor:default}
+tbody tr.grp td,tbody tr.grp:hover td{background:var(--macizo);padding:8px 10px;font:600 17px var(--f-tit);letter-spacing:.04em}
+tbody tr.grp.sub td,tbody tr.grp.sub:hover td{background:rgba(255,255,255,.05);padding:6px 10px 6px 24px;font-size:15px;color:var(--tenue)}
+tbody tr.grp small{font:400 13px var(--f-cuerpo);letter-spacing:0;color:var(--tenue)}
 
 /* estado del stock: píldoras (color + texto) y barra de nivel */
 .pil{border-radius:99px;padding:2px 10px;font-size:12px;font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border:1px solid color-mix(in srgb,currentColor 35%,transparent)}
@@ -422,6 +430,19 @@ function familiaAcero(m){ // categoría de aceros según el material
 function formatosStd(a){const m=new Map();[...(FORM_AREA[a]||[]),...Object.keys((S.cfg.medidasStd||{})[a]||{}),...cats(a).flatMap(c=>(c.subs||[]).map(x=>x.nombre))].forEach(f=>{if(!m.has(sing(f)))m.set(sing(f),f)});return ordenAZ([...m.values()])}
 function stdDe(area,sub){const m=(S.cfg.medidasStd||{})[area]||{},k=Object.keys(m).find(x=>sing(x)===sing(sub||''));return k?m[k]:null}
 const ordenAZ=l=>[...l].sort((x,y)=>String(x).localeCompare(String(y),'es',{sensitivity:'base',numeric:true}));
+const cmpAZ=(x,y)=>String(x).localeCompare(String(y),'es',{sensitivity:'base',numeric:true}); // compara textos A-Z: ignora mayúsculas y acentos; los números van por valor (2 antes que 10)
+function agrupar(l){ // agrupa los ítems por categoría y subcategoría, ambas A-Z; lo que no tiene categoría va al final. Respeta el orden en que llegan los ítems
+  const g=new Map(),fin=(a,b)=>(a===''?1:0)-(b===''?1:0)||cmpAZ(a,b);
+  l.forEach(i=>{const c=catDe(i),s=c&&(c.subs||[]).find(x=>x.id===i.subId),kc=c?c.nombre:'',ks=s?s.nombre:'';
+    if(!g.has(kc))g.set(kc,new Map());const m=g.get(kc);if(!m.has(ks))m.set(ks,[]);m.get(ks).push(i)});
+  return [...g].sort((a,b)=>fin(a[0],b[0])).map(([c,m])=>({cat:c||'Sin categoría',subs:[...m].sort((a,b)=>fin(a[0],b[0])).map(([s,items])=>({sub:s,items}))}));
+}
+function conGrupos(l,cab,fila){ // arma la lista agrupada: cab dibuja el título de cada grupo y fila cada ítem. Los títulos de subcategoría solo aparecen si la categoría tiene subcategorías
+  return agrupar(l).map(g=>{const sub=g.subs.length>1||g.subs[0].sub!=='',n=g.subs.reduce((a,s)=>a+s.items.length,0);
+    return cab(g.cat,n,false)+g.subs.map(s=>(sub?cab(s.sub||'Sin subcategoría',s.items.length,true):'')+s.items.map(fila).join('')).join('')}).join('');
+}
+const cabTarj=(n,c,sub)=>`<div class="grp${sub?' sub':''}">${esc(n)} <small>${c}</small></div>`; // título de grupo en el teléfono
+const cabFila=(n,c,sub)=>`<tr class="grp${sub?' sub':''}"><td colspan="9">${esc(n)} <small>${c}</small></td></tr>`; // título de grupo en la tabla de la PC
 function selMaterial(a,val,lote,id){ // lista de materiales de la pestaña, con opción de escribir uno nuevo
   const l=ordenAZ([...new Set([...((S.cfg.materiales||{})[a]||[]),...(val?[val]:[])])]);
   return `<label${id?` id="${id}"`:''}>Material / calidad<select name="matSel" class="matsel">${lote?'<option value="">No cambiar</option>':'<option value="">Sin material</option>'}${l.map(m=>`<option value="${esc(m)}"${m===val?' selected':''}>${esc(m)}</option>`).join('')}<option value="__otro">Otro (escribir)…</option></select><input name="matOtro" class="matotro" placeholder="Escribí el material" autocomplete="off" hidden style="margin-top:6px"></label>`;
@@ -440,7 +461,7 @@ function ponerAcento(h,guardar){
 }
 ponerAcento(acentoActual());
 const S={gq:'',fAbierto:false,fichaTab:'datos',user:null,admin:false,editor:false,abierto:{},imp:null,sel:null,rapido:null,hist:{id:null,movs:null,fin:null,sug:null},caja:null,selPed:null,movIdx:{},hPar:null,conteo:null,demo:false,tab:'resumen',items:[],movs:[],usuarios:[],cfg:null,detalle:null,f:{}};
-for(const a in AREAS)S.f[a]={q:'',cat:'',sub:'',marca:'',estado:'',orden:'codigo',dir:1};
+for(const a in AREAS)S.f[a]={q:'',cat:'',sub:'',marca:'',estado:'',orden:'descripcion',dir:1};
 let DB=null;
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -754,7 +775,7 @@ const ORD={codigo:i=>i.codigo,descripcion:i=>i.descripcion.toLowerCase(),cat:i=>
 function renderLista(){
   const a=S.tab,f=S.f[a],q=f.q.trim().toLowerCase(),k=ORD[f.orden]||ORD.codigo;
   const l=S.items.filter(i=>i.area===a&&(!q||(i.codigo+' '+i.descripcion+' '+(i.material||'')).toLowerCase().includes(q))&&(!f.cat||i.catId===f.cat)&&(!f.sub||i.subId===f.sub)&&(!f.marca||i.marca===f.marca)&&(!f.estado||(f.estado==='pedido'?!!i.pedidoCurso:estado(i)===f.estado)))
-    .sort((x,y)=>{const A=k(x),B=k(y);return (A<B?-1:A>B?1:0)*f.dir});
+    .sort((x,y)=>{const A=k(x),B=k(y),r=typeof A==='number'?A-B:cmpAZ(A,B);return r*f.dir||cmpAZ(x.descripcion,y.descripcion)}); // dentro de cada grupo: por la columna elegida y, si empatan, A-Z por descripción
   const el=$('#lista');if(!el)return;
   const nf=['cat','sub','marca','estado'].filter(k=>f[k]).length,fb=$('.fbtn');if(fb)fb.innerHTML='Filtros'+(nf?` <b class="cuenta">${nf}</b>`:''); // cuántos filtros hay activos
   if(!l.length){el.innerHTML=`<div class="vacio">${S.items.some(i=>i.area===a)?'Ningún ítem coincide con los filtros.':'Todavía no hay ítems en '+AREAS[a].n+'.'+(S.editor?' Usá "+ Nuevo ítem" o importá un Excel desde Configuración.':'')}</div>`;return}
@@ -771,11 +792,11 @@ function renderLista(){
   if(matchMedia('(min-width:900px)').matches){
     const th=(k,n,c)=>`<th data-act="orden" data-v="${k}"${c?' class="n"':''}>${n}${f.orden===k?(f.dir>0?' ▲':' ▼'):''}</th>`;
     el.innerHTML=`<div class="tabla"><table><thead><tr>${th('estado','Estado')}${th('codigo','Código')}${th('descripcion','Descripción')}${th('cat','Categoría')}${th('marca','Marca')}${th('stock','Stock',1)}${th('minimo','Mín.',1)}<th>Ubicación</th><th></th></tr></thead><tbody>`+
-      l.map(i=>`<tr data-act="${sm?'selItem':'ver'}" data-id="${i.id}"${es(i)?' class="elegido"':''}><td>${pildoras(i)}</td><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${medidas(i)?'<br><small class="tenue">'+esc(medidas(i))+'</small>':''}</td><td>${esc(rutaCat(i))}</td><td>${esc(i.marca||'')}</td><td class="n"><b>${fmt(i.stock)}</b> ${esc(i.unidad)}<div style="width:96px;margin:7px 0 2px auto">${nivel(i)}</div></td><td class="n">${fmt(i.minimo)}</td><td>${esc(i.ubicacion||'')}</td><td>${bot(i)}</td></tr>`).join('')+`</tbody></table></div>`;
+      conGrupos(l,cabFila,i=>`<tr data-act="${sm?'selItem':'ver'}" data-id="${i.id}"${es(i)?' class="elegido"':''}><td>${pildoras(i)}</td><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${medidas(i)?'<br><small class="tenue">'+esc(medidas(i))+'</small>':''}</td><td>${esc(rutaCat(i))}</td><td>${esc(i.marca||'')}</td><td class="n"><b>${fmt(i.stock)}</b> ${esc(i.unidad)}<div style="width:96px;margin:7px 0 2px auto">${nivel(i)}</div></td><td class="n">${fmt(i.minimo)}</td><td>${esc(i.ubicacion||'')}</td><td>${bot(i)}</td></tr>`)+`</tbody></table></div>`;
   }else{
-    el.innerHTML=`<div class="sec">`+l.map(i=>`<div class="tarj${es(i)?' elegido':''}" data-act="${sm?'selItem':'ver'}" data-id="${i.id}"><div class="entre" style="align-items:flex-start"><span class="t">${esc(i.descripcion)}</span><span class="fila" style="justify-content:flex-end">${pildoras(i)}</span></div>
+    el.innerHTML=`<div class="sec">`+conGrupos(l,cabTarj,i=>`<div class="tarj${es(i)?' elegido':''}" data-act="${sm?'selItem':'ver'}" data-id="${i.id}"><div class="entre" style="align-items:flex-start"><span class="t">${esc(i.descripcion)}</span><span class="fila" style="justify-content:flex-end">${pildoras(i)}</span></div>
       <small class="tenue">${esc(i.codigo)} · ${esc(rutaCat(i))}${i.ubicacion?' · '+esc(i.ubicacion):''}${medidas(i)?'<br>'+esc(medidas(i)):''}</small>
-      <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)} <small class="tenue">· mín. ${fmt(i.minimo)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`).join('')+`</div>`;
+      <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)} <small class="tenue">· mín. ${fmt(i.minimo)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`)+`</div>`;
   }
   if(sm){const n=S.sel.ids.size;el.insertAdjacentHTML('beforeend',`<div class="barra" style="margin-top:12px"><span><b>${n}</b> seleccionado${n===1?'':'s'}</span><span class="fila"><button class="chico" data-act="selVis">Todos los visibles</button><button class="chico" data-act="selNada">Ninguno</button><button class="chico pri" data-act="selEditar">Editar</button><button class="chico pel" data-act="selBorrar">Eliminar</button></span></div>`)}
 }
