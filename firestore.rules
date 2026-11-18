@@ -1,8 +1,6 @@
 rules_version = '2';
 // Reglas de Firestore completas — proyecto tpfapps-5f226 (18/11/2026: Reservas compartidas)
-// Incluye: ViajesApp, StockApp, ComprasApp y ProducciónApp.
-// Para cambiar las reglas, editar SIEMPRE este archivo completo y publicarlo entero en
-// Firebase → Base de datos Firestore (Firestore Database) → Reglas (Rules) → Publicar (Publish).
+// Incluye: ViajesApp, StockApp, ComprasApp, ProducciónApp y ProyectosApp.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -85,14 +83,6 @@ service cloud.firestore {
     match /compras_recepciones/{id}   { allow read, create, update: if comprasOk(); allow delete: if stockAdmin(); }
     match /compras_precios/{id}       { allow read, write: if comprasOk(); }
 
-    // ---------- Reservas compartidas (StockApp, ComprasApp y ProducciónApp) ----------
-    // Las ven los usuarios de las tres apps; las editan los editores de StockApp, los usuarios de Compras
-    // y en ProducciónApp quien edita Proyectos.
-    match /empresa_reservas/{id} {
-      allow read: if stockOk() || comprasOk() || prodMiembro();
-      allow write: if stockEditor() || comprasOk() || prodProy();
-    }
-
     // ---------- ProducciónApp ----------
     function prodEmail() { return request.auth.token.email.lower(); }
     function prodDueno() { return request.auth != null && prodEmail() == 'flandinitpf@gmail.com'; }
@@ -140,6 +130,55 @@ service cloud.firestore {
       allow create: if prodMiembro() && request.resource.data.email == prodEmail();
       allow update: if prodMiembro() && resource.data.email == prodEmail() && request.resource.data.email == prodEmail();
       allow delete: if prodAdmin();
+    }
+
+    // ---------- Reservas compartidas (StockApp, ComprasApp y ProducciónApp) ----------
+    // Las ven los usuarios de las tres apps; las editan los editores de StockApp, los usuarios de Compras
+    // y en ProducciónApp quien edita Proyectos.
+    match /empresa_reservas/{id} {
+      allow read: if stockOk() || comprasOk() || prodMiembro();
+      allow write: if stockEditor() || comprasOk() || prodProy();
+    }
+
+    // ---------- ProyectosApp ----------
+    // Cada persona entra con su cuenta de Google. Solo los integrantes de un equipo leen y editan
+    // los datos de ese equipo. Solo los administradores invitan, quitan o renombran el equipo.
+    // Un invitado solo puede sumarse a sí mismo al equipo que lo invitó.
+    function paSesion() { return request.auth != null; }
+    function paEmail() { return request.auth.token.email.lower(); }
+    function paEquipo(eid) { return get(/databases/$(database)/documents/proyectosapp_equipos/$(eid)).data; }
+    function paMiembro(eid) { return paSesion() && request.auth.uid in paEquipo(eid).miembros; }
+    function paAdmin(eid) { return paSesion() && request.auth.uid in paEquipo(eid).admins; }
+
+    match /proyectosapp_usuarios/{uid} {
+      allow read, write: if paSesion() && request.auth.uid == uid;
+    }
+    match /proyectosapp_invitaciones/{email} {
+      allow read: if paSesion() && (paEmail() == email || paAdmin(resource.data.equipoId));
+      allow create, update: if paSesion() && paAdmin(request.resource.data.equipoId);
+      allow delete: if paSesion() && (paEmail() == email || paAdmin(resource.data.equipoId));
+    }
+    match /proyectosapp_equipos/{eid} {
+      allow read: if paSesion()
+        && (request.auth.uid in resource.data.miembros || paEmail() in resource.data.invitados);
+      allow create: if paSesion()
+        && request.resource.data.admins == [request.auth.uid]
+        && request.resource.data.miembros == [request.auth.uid];
+      allow update: if paSesion() && (
+        request.auth.uid in resource.data.admins
+        || (
+          paEmail() in resource.data.invitados
+          && exists(/databases/$(database)/documents/proyectosapp_invitaciones/$(paEmail()))
+          && get(/databases/$(database)/documents/proyectosapp_invitaciones/$(paEmail())).data.equipoId == eid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['miembros', 'invitados', 'perfiles'])
+          && request.resource.data.miembros.toSet() == resource.data.miembros.toSet().union([request.auth.uid].toSet())
+        )
+      );
+      allow delete: if false;
+      // Proyectos, conjuntos, motorreductores y coronas del equipo.
+      match /{coleccion}/{docId} {
+        allow read, write: if paMiembro(eid);
+      }
     }
   }
 }
