@@ -1,5 +1,5 @@
 rules_version = '2';
-// Reglas de Firestore completas — proyecto tpfapps-5f226 (17/10/2026)
+// Reglas de Firestore completas — proyecto tpfapps-5f226 (18/11/2026: Reservas compartidas)
 // Incluye: ViajesApp, StockApp, ComprasApp y ProducciónApp.
 // Para cambiar las reglas, editar SIEMPRE este archivo completo y publicarlo entero en
 // Firebase → Base de datos Firestore (Firestore Database) → Reglas (Rules) → Publicar (Publish).
@@ -64,9 +64,9 @@ service cloud.firestore {
       // Sin permiso de edición solo se puede mover stock y marcar pedidos.
       allow update: if stockEditor() || (stockOk() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'reservas']))
-        // ComprasApp: ingreso por recepción, pedido en curso y costo
+        // ComprasApp: ingreso por recepción, pedido en curso, costo y reserva de lo recibido
         || (comprasOk() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'costo', 'moneda']));
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'costo', 'moneda', 'reservas']));
     }
     match /stockapp_movimientos/{doc} {
       allow read, create: if stockOk();
@@ -84,6 +84,14 @@ service cloud.firestore {
     match /compras_contadores/{id}    { allow read, write: if comprasOk(); }
     match /compras_recepciones/{id}   { allow read, create, update: if comprasOk(); allow delete: if stockAdmin(); }
     match /compras_precios/{id}       { allow read, write: if comprasOk(); }
+
+    // ---------- Reservas compartidas (StockApp, ComprasApp y ProducciónApp) ----------
+    // Las ven los usuarios de las tres apps; las editan los editores de StockApp, los usuarios de Compras
+    // y en ProducciónApp quien edita Proyectos.
+    match /empresa_reservas/{id} {
+      allow read: if stockOk() || comprasOk() || prodMiembro();
+      allow write: if stockEditor() || comprasOk() || prodProy();
+    }
 
     // ---------- ProducciónApp ----------
     function prodEmail() { return request.auth.token.email.lower(); }
