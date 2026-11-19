@@ -59,6 +59,10 @@ h2::before{content:"";width:5px;height:17px;border-radius:3px;flex:none;backgrou
 small{font-size:13px}
 .tenue{color:var(--tenue)}
 :focus-visible{outline:2px solid var(--acento);outline-offset:2px}
+/* navegación con flechas: renglón elegido (ítems, resultados) y margen para que no quede tapado por las barras fijas */
+:is(.tarj,.reng,tr)[data-act]{scroll-margin:calc(var(--alto-cab) + var(--sup) + 12px) 0 calc(var(--alto-nav) + var(--inf) + 16px)}
+tbody tr[data-act]:focus-visible{outline:0}
+tbody tr[data-act]:focus-visible td{background:color-mix(in srgb,var(--acento) 18%,transparent)}
 
 /* ---------- Botones ---------- */
 button,input,select,textarea{font:inherit;color:inherit}
@@ -644,7 +648,7 @@ function atrasVentana(){ // Atrás dentro de una ventana: vuelve a la ventana an
 addEventListener('popstate',e=>{
   if(e.state&&e.state[GUARDIA]===1)return; // volvimos a la entrada de adelante: no hay nada que resolver
   if(!S.cfg){history.back();return} // sin sesión iniciada, Atrás sale como siempre
-  if(!$('#m2').hidden)cerrar('#m2');
+  if(!$('#m2').hidden)cancelarM2();
   else if(!$('#m1').hidden)atrasVentana();
   else if(S.tab!=='resumen')ponerTab('resumen');
   else if(Date.now()-salirT<2500){history.back();return} // segundo Atrás seguido en Inicio: sale de la app
@@ -839,6 +843,7 @@ function pintaConteo(){ // pone al día el "Sistema" y el estado de cada rengló
 const ORD={codigo:i=>i.codigo,descripcion:i=>i.descripcion.toLowerCase(),cat:i=>rutaCat(i).toLowerCase(),marca:i=>(i.marca||'').toLowerCase(),stock:i=>i.stock,minimo:i=>i.minimo,estado:i=>({rojo:0,amarillo:1,verde:2}[estado(i)])};
 function renderLista(){
   const a=S.tab,f=S.f[a],q=f.q.trim().toLowerCase(),k=ORD[f.orden]||ORD.codigo;
+  const fo=document.activeElement,fid=fo&&fo.matches&&fo.matches('#lista '+FILAS)?fo.dataset.id:null; // renglón elegido con las flechas: se recupera al redibujar
   const l=S.items.filter(i=>i.area===a&&(!q||(i.codigo+' '+i.descripcion+' '+(i.material||'')).toLowerCase().includes(q))&&(!f.cat||i.catId===f.cat)&&(!f.sub||i.subId===f.sub)&&(!f.marca||i.marca===f.marca)&&(!f.estado||(f.estado==='pedido'?!!i.pedidoCurso:estado(i)===f.estado)))
     .sort((x,y)=>{const A=k(x),B=k(y),r=typeof A==='number'?A-B:cmpAZ(A,B);return r*f.dir||cmpAZ(x.descripcion,y.descripcion)}); // dentro de cada grupo: por la columna elegida y, si empatan, A-Z por descripción
   const el=$('#lista');if(!el)return;
@@ -864,11 +869,13 @@ function renderLista(){
       <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?` <small class="tenue">${conSub(i).slice(3)}</small>`:''} <small class="tenue">· mín. ${fmt(i.minimo)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`)+`</div>`;
   }
   if(sm){const n=S.sel.ids.size;el.insertAdjacentHTML('beforeend',`<div class="barra" style="margin-top:12px"><span><b>${n}</b> seleccionado${n===1?'':'s'}</span><span class="fila"><button class="chico" data-act="selVis">Todos los visibles</button><button class="chico" data-act="selNada">Ninguno</button><button class="chico pri" data-act="selEditar">Editar</button><button class="chico pel" data-act="selBorrar">Eliminar</button></span></div>`)}
+  if(fid)enfocar(filaDe(fid));
 }
 
 /* ---------- Ventanas ---------- */
 function abrir(html,capa){const m=$(capa||'#m1');m.innerHTML=`<div class="hoja" role="dialog" aria-modal="true">${html}</div>`;m.hidden=false}
-function cerrar(capa){const m=$(capa||'#m1');m.hidden=true;m.innerHTML='';if(!capa){S.detalle=null;S.rapido=null;S.desdeCompras=false;S.selPed=null}}
+function cerrar(capa){const m=$(capa||'#m1');m.hidden=true;m.innerHTML='';m.onclick=null;m._cancelar=null; // borra lo que quedaba de la ventana anterior
+  if(!capa){S.detalle=null;S.rapido=null;S.desdeCompras=false;S.selPed=null;volverFoco()}}
 function modalRapido(tipo){ // buscar un ítem de cualquier pestaña y registrar el movimiento
   S.rapido=tipo;S.detalle=null;const ent=tipo==='entrada';
   abrir(`<div class="entre"><h2 style="color:var(--${ent?'verde':'rojo'})">${ent?'Entrada':'Salida'} rápida</h2><button class="chico" data-act="cerrar">Cerrar</button></div>
@@ -883,9 +890,12 @@ function listaRapida(){
     :`<div class="vacio">${q?'Ningún ítem coincide.':'Escribí parte del código o la descripción.'}</div>`;
 }
 function confirmar(texto,boton){return new Promise(r=>{abrir(`<p>${esc(texto)}</p><div class="fila" style="justify-content:flex-end"><button data-r="0">Cancelar</button><button class="pri" data-r="1">${esc(boton||'Aceptar')}</button></div>`,'#m2');
-  $('#m2').onclick=e=>{const b=e.target.closest('[data-r]');if(b||e.target===$('#m2')){cerrar('#m2');r(!!b&&b.dataset.r==='1')}}})}
+  const m=$('#m2');m._cancelar=()=>{cerrar('#m2');r(false)}; // Escape o Atrás: Cancelar
+  m.onclick=e=>{const b=e.target.closest('[data-r]');if(b){cerrar('#m2');r(b.dataset.r==='1')}}; // tocar afuera ya no cierra
+  m.querySelector('[data-r="0"]').focus()})} // arranca en Cancelar: Enter no confirma por error
 function pedir(titulo,valor){return new Promise(r=>{abrir(`<form id="fp"><label>${esc(titulo)}<input id="pv" value="${esc(valor||'')}" autocomplete="off"></label><div class="fila" style="justify-content:flex-end"><button type="button" data-r="0">Cancelar</button><button class="pri">Guardar</button></div></form>`,'#m2');
-  $('#pv').focus();$('#m2').onclick=e=>{if(e.target.closest('[data-r]')||e.target===$('#m2')){cerrar('#m2');r(null)}};
+  const m=$('#m2');m._cancelar=()=>{cerrar('#m2');r(null)};
+  $('#pv').focus();m.onclick=e=>{if(e.target.closest('[data-r]'))m._cancelar()};
   $('#fp').onsubmit=e=>{e.preventDefault();const v=$('#pv').value.trim();cerrar('#m2');r(v||null)}})}
 
 function verItem(id){
@@ -1220,7 +1230,6 @@ async function accionCat(act,d){
 
 /* ---------- Eventos ---------- */
 document.addEventListener('click',async e=>{
-  if(e.target===$('#m1')){cerrar();return}
   const b=e.target.closest('[data-act]');if(!b)return;
   const d=b.dataset,act=d.act;
   if(act==='mov'){e.stopPropagation();formMov(d.id,d.v)}
@@ -1428,6 +1437,46 @@ document.addEventListener('change',e=>{
 document.addEventListener('toggle',e=>{const k=e.target.dataset&&e.target.dataset.k;if(k)S.abierto[k]=e.target.open},true);
 matchMedia('(min-width:900px)').addEventListener('change',()=>{if(AREAS[S.tab])renderLista()});
 
+/* ---------- Teclado: Escape cierra sin guardar y las flechas recorren listas y ventanas ---------- */
+const FILAS=':is(.tarj,.reng,tr)[data-act]'; // renglones que se abren con Enter (ítems, resultados de búsqueda, Entrada/Salida rápida)
+const visible=el=>el.getClientRects().length>0&&!el.disabled;
+function cancelarM2(){const m=$('#m2');m._cancelar?m._cancelar():cerrar('#m2')} // ventanita de arriba (confirmar, pedir nombre): cuenta como Cancelar
+function enfocar(el){ // pone el foco en un renglón o botón y lo trae a la vista
+  if(!el)return;if(!el.matches('button,input,select,textarea,a'))el.tabIndex=-1;
+  el.focus({preventScroll:true});el.scrollIntoView({block:'nearest'});
+}
+function filaDe(id){return [...document.querySelectorAll('#app '+FILAS)].find(f=>f.dataset.id===id)}
+function volverFoco(){if(S.teclado&&S.focoId)enfocar(filaDe(S.focoId))} // al cerrar con el teclado vuelve al ítem desde donde se abrió
+const capaAbierta=()=>!$('#m2').hidden?$('#m2'):!$('#m1').hidden?$('#m1'):null;
+const paso=(l,a,sube)=>{const i=l.indexOf(a);return i<0?l[0]:l[Math.min(l.length-1,Math.max(0,i+(sube?-1:1)))]};
+addEventListener('pointerdown',()=>S.teclado=false,true); // con el mouse o el dedo no se marca el foco
+document.addEventListener('keydown',e=>{
+  S.teclado=true;
+  if(e.defaultPrevented||e.isComposing||e.altKey||e.ctrlKey||e.metaKey)return;
+  const k=e.key,a=document.activeElement,m=capaAbierta(),fila=!!(a&&a.matches&&a.matches(FILAS));
+  // Escape: igual que Cancelar / Atrás (vuelve a la ventana anterior o cierra, sin guardar)
+  if(k==='Escape'){if(!m)return;e.preventDefault();m.id==='m2'?cancelarM2():atrasVentana();return}
+  // Enter sobre un renglón: lo abre
+  if(k==='Enter'&&fila){e.preventDefault();if(!m)S.focoId=a.dataset.id;a.click();return}
+  if(!/^Arrow(Up|Down|Left|Right)$/.test(k))return;
+  const sube=k==='ArrowUp'||k==='ArrowLeft',vert=k==='ArrowUp'||k==='ArrowDown',campo=!!(a&&a.matches&&a.matches('input,select,textarea'));
+  if(m){ // dentro de una ventana: recorre botones, campos y renglones
+    if(campo&&(!vert||a.matches('select,textarea,input[list],input[type=date],input[type=color]')))return; // estos usan las flechas para lo suyo
+    const l=[...m.querySelectorAll('button,input:not([type=hidden]),select,textarea,'+FILAS)].filter(visible);
+    if(l.length){e.preventDefault();enfocar(paso(l,a,sube))}
+    return;
+  }
+  if(!vert)return;
+  if(a&&a.classList&&a.classList.contains('ct')){ // relevamiento: pasa al ítem de arriba o de abajo (lo escrito se guarda solo)
+    const l=[...document.querySelectorAll('#lista input.ct')],n=l[l.indexOf(a)+(sube?-1:1)];if(n){e.preventDefault();n.focus()}return;
+  }
+  if(campo&&!['f-q','g-q'].includes(a.id))return; // otros campos de la pantalla: sin cambios
+  const l=[...document.querySelectorAll('#app '+FILAS)].filter(visible);if(!l.length)return;
+  e.preventDefault();
+  if(fila&&l.indexOf(a)===0&&sube){const b=$('#f-q')||$('#g-q');if(b){b.focus();return}} // desde el primero, arriba vuelve al buscador
+  enfocar(fila?paso(l,a,sube):l[0]);
+});
+
 /* ---------- Relevamiento: calculadora y guardado automático ---------- */
 const TECLAS=[['C','bo'],['('],[')'],['÷','op'],['7'],['8'],['9'],['×','op'],['4'],['5'],['6'],['−','op'],['1'],['2'],['3'],['+','op'],['0'],[','],['⌫','bo'],['=','pri']];
 function abrirCalc(id){ // calculadora común (+ − × ÷ y paréntesis); arranca con lo que ya haya en el campo
@@ -1467,7 +1516,6 @@ function usarCalc(){ // pasa la cuenta al campo del ítem y la guarda
 document.addEventListener('keydown',e=>{ // en la PC la calculadora también se usa con el teclado
   if(!S.calc||$('#m1').hidden||!$('#m1 [data-calc]'))return;
   const m={'*':'×',x:'×',X:'×','/':'÷','-':'−','.':',',Enter:'=',Backspace:'⌫',Delete:'C'},t=m[e.key]||(/^[\d+(),=]$/.test(e.key)?e.key:null);
-  if(e.key==='Escape'){cerrar();return}
   if(!t)return;e.preventDefault();teclaCalc(t);
 });
 // se guarda al salir del campo, con Enter (y pasa al siguiente ítem) y cuando la app pasa a segundo plano o se cierra
