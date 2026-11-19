@@ -1139,6 +1139,7 @@ function vConfig(){
     <small class="tenue">Al restaurar, los ítems y la configuración vuelven a como estaban en la copia. Los movimientos que falten se recuperan y los posteriores quedan en el historial.</small></div>`:''}
   <div class="bloque"><h2>Importar y exportar</h2><small class="tenue">Importá ítems desde un Excel (.xlsx). Podés usar la plantilla o tu propia planilla: después de elegir el archivo indicás qué columna corresponde a cada dato.</small>
     <label>Archivo de Excel<input type="file" id="imp-arch" accept=".xlsx,.xls,.csv"></label>
+    <label>Unificar desde Excel (renombrar, unir repetidos y cargar nuevos)<input type="file" id="uni-arch" accept=".xlsx"></label><small class="tenue">Usa un Excel con las hojas "Plan" y "Nuevos". Antes de cambiar nada muestra un resumen para revisar.</small>
     <div class="fila"><button data-act="listasBase">Sumar listas de la planilla de compras</button></div><small class="tenue">Agrega los proveedores, materiales, unidades y categorías de tu planilla de compras que todavía no estén cargados. No borra nada.</small>
     <div class="fila"><button data-act="plantilla">Descargar plantilla</button><button data-act="exportar">Exportar todo el stock a Excel</button></div></div>
   ${S.demo||S.admin?`<div class="bloque"><h2>Usuarios</h2>${S.demo?'<small class="tenue">Disponible al conectar Firebase: vas a crear acá el correo y la contraseña de cada usuario, y a decidir quién puede editar.</small>':`<div class="lista">${S.usuarios.map(u=>`<div class="reng"><div>${esc(u.nombre||u.email)}<br><small>${esc(u.email)}</small><label class="check" style="margin-top:6px"><input type="checkbox" class="u-ed" data-email="${esc(u.email)}"${u.editor?' checked':''}>Puede editar ítems y configuración</label></div><span class="fila" style="flex-direction:column;align-items:flex-end"><button class="chico" data-act="nombreUsuario" data-v="${esc(u.email)}">Cambiar nombre</button><button class="chico pel" data-act="quitarUsuario" data-v="${esc(u.email)}">Quitar acceso</button></span></div>`).join('')||'<small class="tenue">Todavía no creaste usuarios. Solo vos tenés acceso.</small>'}</div>
@@ -1185,20 +1186,16 @@ function modalImportar(){
     <div class="err" id="imp-err"></div>
     <div class="fila" style="justify-content:flex-end"><button type="button" data-act="cerrar">Cancelar</button><button class="pri">Importar</button></div></form>`);
 }
-function importar(d){
-  const m={};CAMPOS.forEach(([k])=>m[k]=d['m_'+k]||'');
-  if(!m.descripcion){$('#imp-err').textContent='Elegí la columna que tiene la descripción.';return}
-  const g=(r,k)=>m[k]?String(r[m[k]]??'').trim():'',cont={},nuevos=[];let dup=0,vac=0;
-  for(const a in AREAS){cont[a]=0;S.items.forEach(i=>{if(i.area===a){const n=parseInt(String(i.codigo).split('-')[1]);if(n>cont[a])cont[a]=n}})}
-  const hay=new Set(S.items.map(i=>i.area+'|'+sinAc(i.descripcion)));
+function armarNuevos(filas,g,areaDef,hay,cont){ // arma los ítems nuevos de una planilla (Importar Excel y Unificar desde Excel)
+  const nuevos=[];let dup=0,vac=0;
   const RUB={'acero':['aceros',''],'aceros':['aceros',''],'plastico':['plasticos',''],'plasticos':['plasticos',''],'metales no ferrosos':['noferrosos',''],'no ferrosos':['noferrosos',''],
     'bandas':['componentes','Bandas'],'electronica / electricidad':['componentes','Electrónica / Electricidad'],'motores / reductores y variadores':['componentes','Motores / Reductores y variadores'],'neumatica':['componentes','Neumática'],'rodamientos':['componentes','Rodamientos']};
   const areaDe=t=>Object.keys(AREAS).find(a=>sinAc(AREAS[a].n)===sinAc(t)||a===sinAc(t).replace(/\s/g,''));
   const busca=(l,n)=>{let x=l.find(c=>sinAc(c.nombre)===sinAc(n));if(!x){x={id:uid(),nombre:n,subs:[]};l.push(x)}return x};
-  S.imp.filas.forEach(r=>{
+  filas.forEach(r=>{
     const desc=g(r,'descripcion');if(!desc){vac++;return}
     const va=g(r,'area');let area=areaDe(va),catAuto='';if(!area&&va){const rb=RUB[sinAc(va)];if(rb){area=rb[0];catAuto=rb[1]}else{area='panol';catAuto=va}}
-    if(!area)area=d.areaDef;const cl=area+'|'+sinAc(desc);if(hay.has(cl)){dup++;return}hay.add(cl);
+    if(!area)area=areaDef;const cl=area+'|'+sinAc(desc);if(hay.has(cl)){dup++;return}hay.add(cl);
     const fmt0=AREAS[area].tec?(FORMATOS.find(f=>sinAc(f)===sinAc(g(r,'formato')))||formatoDe(area,desc)):'',cn=g(r,'categoria')||catAuto||(area==='aceros'?familiaAcero(g(r,'material')||desc):AREAS[area].tec?g(r,'material'):''),sn=g(r,'subcategoria')||fmt0,cat=cn?busca(S.cfg.categorias[area],cn):null,sub=cat&&sn?busca(cat.subs,sn):null,ahora=Date.now();
     const it={area,codigo:AREAS[area].p+'-'+String(++cont[area]).padStart(4,'0'),descripcion:desc,catId:cat?cat.id:'',subId:sub?sub.id:'',unidad:g(r,'unidad')||'un',stock:Math.max(0,num(g(r,'stock'))),minimo:Math.max(0,num(g(r,'minimo'))),cantPedido:Math.max(0,num(g(r,'cantPedido'))),
       marca:g(r,'marca'),marcasSug:g(r,'marcasSug').split(',').map(x=>x.trim()).filter(Boolean),proveedor:g(r,'proveedor'),ubicacion:g(r,'ubicacion'),obs:g(r,'obs'),material:g(r,'material'),plazo:Math.max(0,Math.round(num(g(r,'plazo')))),costo:Math.max(0,num(g(r,'costo'))),moneda:(mo=>/usd|u\$s|dolar/.test(mo)?'USD':/\$|ars|peso/.test(mo)?'ARS':'USD')(sinAc(g(r,'moneda'))),pedidoCurso:null,creado:ahora,actualizado:ahora};
@@ -1206,8 +1203,94 @@ function importar(d){
     const L=(l,v)=>{if(v&&!l.some(x=>sinAc(x)===sinAc(v)))l.push(v)};L(S.cfg.marcas,it.marca);it.marcasSug.forEach(x=>L(S.cfg.marcas,x));L(S.cfg.proveedores,it.proveedor);L(S.cfg.materiales[area],it.material);L(S.cfg.unidades,it.unidad);
     nuevos.push(it);
   });
+  return {nuevos,dup,vac};
+}
+function importar(d){
+  const m={};CAMPOS.forEach(([k])=>m[k]=d['m_'+k]||'');
+  if(!m.descripcion){$('#imp-err').textContent='Elegí la columna que tiene la descripción.';return}
+  const g=(r,k)=>m[k]?String(r[m[k]]??'').trim():'',cont={},nuevos=[];let dup=0,vac=0;
+  for(const a in AREAS){cont[a]=0;S.items.forEach(i=>{if(i.area===a){const n=parseInt(String(i.codigo).split('-')[1]);if(n>cont[a])cont[a]=n}})}
+  const hay=new Set(S.items.map(i=>i.area+'|'+sinAc(i.descripcion)));
+  const r0=armarNuevos(S.imp.filas,g,d.areaDef,hay,cont);nuevos.push(...r0.nuevos);dup=r0.dup;vac=r0.vac;
   normCfg(S.cfg);guardarCfg();if(nuevos.length)DB.importar(nuevos);S.imp=null;
   abrir(`<h2>Importación terminada</h2><p>Se importaron <b>${nuevos.length}</b> ítems.${dup?'<br>'+dup+' fila(s) omitidas porque ese ítem ya existía.':''}${vac?'<br>'+vac+' fila(s) sin descripción.':''}</p><button class="pri" data-act="cerrar">Aceptar</button>`);
+  render();
+}
+/* ---------- Unificar desde Excel: renombra, une repetidos y carga ítems nuevos de una sola vez ----------
+   Lee un Excel con dos hojas:
+   - "Plan": Código · Acción (Dejar / Renombrar / Unir) · Descripción nueva · Unir con (código del ítem que queda)
+   - "Nuevos": Descripción · Sección · Categoría de compras · Material · U. medida · Proveedor · Marca
+   Antes de cambiar nada muestra un resumen; se aplica sobre los datos actuales (no sobre una copia vieja). */
+async function leerUnificar(arch){
+  if(!S.editor){toast('Solo quien edita ítems puede unificar');return}
+  let X,wb;try{X=await excel();wb=X.read(await arch.arrayBuffer())}catch(e){toast('No se pudo leer el archivo');return}
+  const hoja=n=>{const k=wb.SheetNames.find(x=>sinAc(x)===sinAc(n));return k?X.utils.sheet_to_json(wb.Sheets[k],{defval:''}):[]};
+  const col=(r,...ns)=>{for(const n of ns){const k=Object.keys(r).find(x=>sinAc(x)===sinAc(n));if(k!=null)return String(r[k]??'').trim()}return ''};
+  const plan=hoja('Plan'),nuevosX=hoja('Nuevos');
+  if(!plan.length&&!nuevosX.length){toast('El archivo no tiene las hojas "Plan" ni "Nuevos"');return}
+  const porCod=new Map(S.items.map(i=>[String(i.codigo).toUpperCase(),i])),av=[],ren=[],uni=[];
+  plan.forEach(r=>{
+    const cod=col(r,'Código','Codigo').toUpperCase();if(!cod)return;
+    const it=porCod.get(cod),acc=sinAc(col(r,'Acción','Accion')),desc=col(r,'Descripción nueva','Descripcion nueva'),dest=col(r,'Unir con').toUpperCase();
+    if(!it){av.push(cod+': no está en StockApp, se saltea');return}
+    if(acc==='unir'){
+      const k=porCod.get(dest);
+      if(!k||k===it){av.push(cod+': "Unir con" '+(dest||'vacío')+' no es válido, se saltea');return}
+      uni.push({s:it,k,desc});
+    }else if(desc&&desc!==it.descripcion)ren.push({it,desc});
+  });
+  // el que queda no puede ser a su vez uno que se elimina
+  const seVan=new Set(uni.map(u=>u.s.id));
+  for(let i=uni.length-1;i>=0;i--){const u=uni[i];
+    if(seVan.has(u.k.id)){av.push(u.s.codigo+': se iba a unir con '+u.k.codigo+', que también se elimina. Se saltea');uni.splice(i,1);seVan.delete(u.s.id);continue}
+    if(u.s.stock>0&&sinAc(u.s.unidad)!==sinAc(u.k.unidad)){av.push(u.s.codigo+' tiene stock en "'+u.s.unidad+'" y '+u.k.codigo+' está en "'+u.k.unidad+'": no se une, revisalo a mano');uni.splice(i,1);seVan.delete(u.s.id);continue}
+    if(u.s.pedidoCurso&&u.k.pedidoCurso)av.push(u.s.codigo+' y '+u.k.codigo+' tienen pedido en curso: queda el de '+u.k.codigo);
+    if(u.s.pedidoCurso&&u.s.pedidoCurso.oc)av.push(u.s.codigo+' tiene la '+u.s.pedidoCurso.oc+' de ComprasApp: el pedido pasa a '+u.k.codigo+'; revisá el renglón en la OC');
+  }
+  // descripción final de cada ítem que queda (para no cargar como nuevo algo que ya existe)
+  const fin=new Map(S.items.filter(i=>!seVan.has(i.id)).map(i=>[i.id,i.descripcion]));
+  ren.forEach(x=>{if(!seVan.has(x.it.id))fin.set(x.it.id,x.desc)});
+  uni.forEach(u=>{if(u.desc)fin.set(u.k.id,u.desc)});
+  const hay=new Set([...fin.entries()].map(([id,d])=>item(id).area+'|'+sinAc(d))),yaEsta=new Set([...fin.values()].map(sinAc));
+  const filas=[];let ya=0;
+  nuevosX.forEach(r=>{const d=col(r,'Descripción','Descripcion');if(!d)return;if(yaEsta.has(sinAc(d))){ya++;return}
+    const sec=col(r,'Sección','Seccion'),a=Object.keys(AREAS).find(k=>sinAc(AREAS[k].n)===sinAc(sec)),cat=col(r,'Categoría de compras','Categoria de compras','Categoría');
+    filas.push({descripcion:d,area:sec,categoria:a&&AREAS[a].tec?'':cat,material:col(r,'Material'),unidad:col(r,'U. medida','Unidad')||'un',proveedor:col(r,'Proveedor'),marca:col(r,'Marca')})});
+  S.uni={ren:ren.filter(x=>!seVan.has(x.it.id)),uni,filas};
+  const li=(l,f)=>l.length?`<div class="lista" style="max-height:220px;overflow:auto">${l.slice(0,300).map(f).join('')}</div>`:'';
+  const nA={};filas.forEach(f=>{const a=Object.keys(AREAS).find(k=>sinAc(AREAS[k].n)===sinAc(f.area))||'panol';nA[a]=(nA[a]||0)+1});
+  abrir(`<div class="sec"><div class="entre"><h2>Unificar desde Excel</h2><button class="chico" data-act="cerrar">Cancelar</button></div>
+    <small class="tenue">Revisá el resumen. Todavía no se cambió nada.</small>
+    <details><summary><span><b>${S.uni.ren.length}</b> ítems se renombran</span></summary>${li(S.uni.ren,x=>`<div class="reng"><div><small>${esc(x.it.codigo)} · ${esc(x.it.descripcion)}</small><br>→ ${esc(x.desc)}</div></div>`)}</details>
+    <details><summary><span><b>${uni.length}</b> ítems se unen con otro y se eliminan</span></summary>${li(uni,u=>`<div class="reng"><div><small>${esc(u.s.codigo)} · ${esc(u.s.descripcion)}</small><br>→ ${esc(u.k.codigo)} · ${esc(u.desc||u.k.descripcion)}</div><div class="der"><small>${u.s.stock?'pasa '+fmt(u.s.stock)+' '+esc(u.s.unidad):'sin stock'}${(u.s.reservas||[]).length?'<br>+ reservas':''}${u.s.pedidoCurso?'<br>+ pedido':''}</small></div></div>`)}</details>
+    <details><summary><span><b>${filas.length}</b> ítems nuevos</span></summary><div class="chips" style="margin-top:8px">${Object.keys(nA).map(a=>`<span class="chip" style="padding:3px 12px">${AREAS[a].n} · ${nA[a]}</span>`).join('')}</div>${li(filas,f=>`<div class="reng"><div>${esc(f.descripcion)}<br><small>${esc(f.area||'Pañol')}${f.categoria?' · '+esc(f.categoria):''}</small></div></div>`)}</details>
+    ${ya?`<small class="tenue">${ya} renglón(es) de "Nuevos" ya existen en StockApp y no se cargan.</small>`:''}
+    ${av.length?`<div class="sug"><b style="color:var(--amar)">Avisos (${av.length})</b>${av.map(t=>`<small>${esc(t)}</small>`).join('')}</div>`:''}
+    <small class="tenue">Al unir, el stock, las reservas, el pedido en curso y el historial de movimientos pasan al ítem que queda. Conviene descargar una copia de seguridad antes.</small>
+    <div class="fila" style="justify-content:flex-end"><button data-act="cerrar">Cancelar</button><button class="pri" data-act="uniAplicar"${!S.uni.ren.length&&!uni.length&&!filas.length?' disabled':''}>Aplicar cambios</button></div></div>`);
+}
+async function aplicarUnificar(){
+  const U=S.uni;if(!U)return;S.uni=null;
+  abrir('<div class="centro" style="min-height:0"><h2>Aplicando cambios…</h2><small class="tenue">No cierres la app.</small></div>');
+  let n={ren:0,uni:0,nue:0},err=0;const ahora=Date.now(),piso={};for(const a in AREAS)piso[a]=maxCodigo(a); // códigos más altos antes de borrar: no se reusan
+  try{
+    U.ren.forEach(x=>{DB.patchItem(x.it.id,{descripcion:x.desc,actualizado:ahora});n.ren++});
+    for(const u of U.uni){const s=item(u.s.id),k=item(u.k.id);if(!s||!k)continue;
+      const p={actualizado:ahora,reservas:[...(k.reservas||[]),...(s.reservas||[])]};
+      if(u.desc)p.descripcion=u.desc;if(!k.pedidoCurso&&s.pedidoCurso)p.pedidoCurso=s.pedidoCurso;
+      ['marca','proveedor','ubicacion','material','obs'].forEach(c=>{if(!k[c]&&s[c])p[c]=s[c]});
+      if(!(k.minimo>0)&&s.minimo>0){p.minimo=s.minimo;p.cantPedido=s.cantPedido}
+      await DB.unirItems(s,Object.assign({},k,p),p);n.uni++}
+    if(U.filas.length){
+      const cont={};for(const a in AREAS)cont[a]=maxCodigo(a);
+      const hay=new Set(S.items.map(i=>i.area+'|'+sinAc(i.descripcion))),g=(r,c)=>String(r[c]??'').trim();
+      const r0=armarNuevos(U.filas,g,'panol',hay,cont),porA={};
+      r0.nuevos.forEach(it=>(porA[it.area]=porA[it.area]||[]).push(it));
+      for(const a in porA){const cods=await DB.sigCodigos(a,porA[a].length,piso[a]);porA[a].forEach((it,i)=>it.codigo=cods[i])} // contador compartido con ComprasApp
+      normCfg(S.cfg);guardarCfg();DB.importar(r0.nuevos);n.nue=r0.nuevos.length;
+    }
+  }catch(e){err++;console.error(e)}
+  abrir(`<h2>${err?'Unificación incompleta':'Unificación terminada'}</h2><p>Renombrados: <b>${n.ren}</b><br>Unidos: <b>${n.uni}</b><br>Nuevos: <b>${n.nue}</b></p>${err?'<p class="err">Hubo un error a mitad de camino (¿sin conexión?). Volvé a subir el mismo archivo: lo que ya se hizo no se repite.</p>':''}<button class="pri" data-act="cerrar">Aceptar</button>`);
   render();
 }
 async function bajarExcel(tipo){
@@ -1278,6 +1361,7 @@ document.addEventListener('click',async e=>{
   else if(act==='selGuardar'){const sp=S.selPed;if(!sp.ids.size){toast('Elegí al menos un ítem');return}if(!sp.fecha){toast('Elegí la fecha del pedido');return}
     const f=new Date(sp.fecha+'T12:00').getTime(),n=sp.ids.size;sp.ids.forEach(id=>{const it=item(id);if(it)DB.patchItem(id,{pedidoCurso:Object.assign({fecha:f,cantidad:it.cantPedido},quienAhora())})});S.selPed=null;pintarCompras();toast(n+' ítem(s) marcados como pedido')}
   else if(act==='backup')hacerBackup();
+  else if(act==='uniAplicar')aplicarUnificar();
   else if(act==='hMes'){const n=S.hist.fin+(+d.v);if(n>mesDe(Date.now())){toast('Todavía no hay datos de ese mes');return}S.hist.fin=n;pintaHist()}
   else if(act==='nombreUsuario'){const u=S.usuarios.find(x=>x.email===d.v);const n=await pedir('Nombre que se muestra en los movimientos',u&&u.nombre);if(n){DB.usuario(d.v,{nombre:n});toast('Nombre actualizado')}}
   else if(act==='editar')formItem(null,d.id);
@@ -1431,6 +1515,7 @@ document.addEventListener('change',e=>{
   }
   else if(e.target.classList.contains('u-ed'))DB.usuario(e.target.dataset.email,{editor:e.target.checked});
   else if(id==='imp-arch'&&e.target.files[0])leerExcel(e.target.files[0]);
+  else if(id==='uni-arch'&&e.target.files[0]){leerUnificar(e.target.files[0]);e.target.value=''}
   else if(id==='rs-arch'&&e.target.files[0]){leerBackup(e.target.files[0]);e.target.value=''}
   else if(id==='sp-fecha')S.selPed.fecha=v;
   else if(e.target.classList.contains('sp')){e.target.checked?S.selPed.ids.add(e.target.dataset.id):S.selPed.ids.delete(e.target.dataset.id);pintarCompras()}
@@ -1569,13 +1654,16 @@ function demoDB(){
   return {
     start(){try{D=JSON.parse(localStorage.getItem(K))}catch(_){D=null}
       if(D&&D.cfg){S.items=D.items;S.movs=D.movs;S.cfg=D.cfg=normCfg(D.cfg);S.reservas=D.reservas=D.reservas||[]}else ejemplo();render()},
-    async sigCodigos(area,cant){let m=maxCodigo(area);return Array.from({length:cant},()=>AREAS[area].p+'-'+String(++m).padStart(4,'0'))},
+    async sigCodigos(area,cant,piso){let m=Math.max(maxCodigo(area),piso||0);return Array.from({length:cant},()=>AREAS[area].p+'-'+String(++m).padStart(4,'0'))},
     guardarItem(id,data){if(id)Object.assign(item(id),data);else{id=uid();S.items.push(Object.assign({id},data))}guardar();alDato();return id},
     patchItem(id,p){Object.assign(item(id),p);guardar();alDato()},
     borrarItem(id){S.items.splice(S.items.findIndex(i=>i.id===id),1);guardar();alDato()},
     mov(it,tipo,c,motivo,ref,patch,extra){const r=item(it.id);r.stock=Math.round((r.stock+(tipo==='entrada'?c:-c))*1e4)/1e4;Object.assign(r,patch);
       S.movs.unshift(Object.assign({id:uid(),itemId:r.id,codigo:r.codigo,descripcion:r.descripcion,area:r.area,unidad:r.unidad,tipo,cantidad:c,motivo,ref,usuario:S.user.nombre,fecha:Date.now(),stockRes:r.stock},extra||{}));guardar();alDato()},
     marcarAnulado(id,p){const m=S.movs.find(x=>x.id===id);if(m)Object.assign(m,p);guardar();alDato()},
+    async unirItems(s,k,p){const r=item(k.id);Object.assign(r,p);r.stock=Math.round((r.stock+(s.stock||0))*1e4)/1e4; // une s en k: suma el stock y pasa el historial
+      S.movs.forEach(m=>{if(m.itemId===s.id)Object.assign(m,{itemId:r.id,codigo:r.codigo,descripcion:r.descripcion,unidoDe:s.codigo})});
+      S.items.splice(S.items.findIndex(i=>i.id===s.id),1);guardar();alDato()},
     todo(){return Promise.resolve({cfg:S.cfg,items:S.items,movs:S.movs})},
     restaurar(d){const ids=new Set(S.movs.map(m=>m.id));S.items=D.items=d.items;S.cfg=D.cfg=normCfg(d.cfg);d.movs.forEach(m=>{if(!ids.has(m.id))S.movs.push(m)});S.movs.sort((a,b)=>b.fecha-a.fecha);D.movs=S.movs;guardar();render();return Promise.resolve()},
     guardarCfg(){guardar()},
@@ -1623,8 +1711,8 @@ function fireDB(){
       await fs.collection('stockapp_usuarios').doc(email).set({nombre,rol:'usuario',editor:false,alta:Date.now()});},
     salir(){au.signOut()},
     // Códigos con contador compartido con ComprasApp (transacción: nunca se repiten)
-    async sigCodigos(area,cant){const p=AREAS[area].p,ref=fs.doc('stockapp_config/codigos');let l=[];
-      await fs.runTransaction(async tx=>{const c=await tx.get(ref);let n=Math.max((c.exists&&c.data()[p])||0,maxCodigo(area));
+    async sigCodigos(area,cant,piso){const p=AREAS[area].p,ref=fs.doc('stockapp_config/codigos');let l=[]; // piso: no reusar códigos de ítems que se acaban de borrar
+      await fs.runTransaction(async tx=>{const c=await tx.get(ref);let n=Math.max((c.exists&&c.data()[p])||0,maxCodigo(area),piso||0);
         l=Array.from({length:cant},()=>p+'-'+String(++n).padStart(4,'0'));tx.set(ref,{[p]:n},{merge:true})});
       return l},
     guardarItem(id,data){const r=id?fs.collection('stockapp_items').doc(id):fs.collection('stockapp_items').doc();(id?r.update(data):r.set(data)).catch(fallo);return r.id},
@@ -1639,6 +1727,10 @@ function fireDB(){
       fs.collection('empresa_reservas').doc(id).set(x,{merge:true}).catch(e=>toast('No se pudo guardar la reserva ('+e.code+')'))},
     borrarReserva(id){fs.collection('empresa_reservas').doc(id).delete().catch(e=>toast('No se pudo borrar ('+e.code+')'))},
     marcarAnulado(id,p){fs.collection('stockapp_movimientos').doc(id).update(p).catch(fallo)},
+    async unirItems(s,k,p){ // une s en k: suma el stock, pasa reservas y pedido (en p), borra s y pasa su historial de movimientos a k
+      const b=fs.batch();b.update(fs.collection('stockapp_items').doc(k.id),Object.assign({},p,{stock:inc(s.stock||0)}));b.delete(fs.collection('stockapp_items').doc(s.id));await b.commit();
+      const ms=await fs.collection('stockapp_movimientos').where('itemId','==',s.id).get();
+      for(let i=0;i<ms.docs.length;i+=400){const c=fs.batch();ms.docs.slice(i,i+400).forEach(d=>c.update(d.ref,{itemId:k.id,codigo:k.codigo,descripcion:k.descripcion,unidoDe:s.codigo}));await c.commit()}},
     async todo(){const [i,m,c]=await Promise.all([fs.collection('stockapp_items').get(),fs.collection('stockapp_movimientos').get(),fs.doc('stockapp_config/general').get()]);return {cfg:c.data()||{},items:lee(i),movs:lee(m)}},
     async restaurar(d){
       const [ei,em]=await Promise.all([fs.collection('stockapp_items').get(),fs.collection('stockapp_movimientos').get()]),hay=new Set(em.docs.map(x=>x.id)),quedan=new Set(d.items.map(i=>i.id)),ops=[];
