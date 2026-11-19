@@ -1218,7 +1218,8 @@ function importar(d){
 }
 /* ---------- Unificar desde Excel: renombra, une repetidos y carga ítems nuevos de una sola vez ----------
    Lee un Excel con dos hojas:
-   - "Plan": Código · Acción (Dejar / Renombrar / Unir) · Descripción nueva · Unir con (código del ítem que queda)
+   - "Plan": Código · Acción (Dejar / Renombrar / Unir) · Descripción nueva · Unir con (código del ítem que queda).
+     Sin código, el ítem se busca por la "Descripción actual" (solo para renombrar)
    - "Nuevos": Descripción · Sección · Categoría de compras · Material · U. medida · Proveedor · Marca
    Antes de cambiar nada muestra un resumen; se aplica sobre los datos actuales (no sobre una copia vieja). */
 async function leerUnificar(arch){
@@ -1229,8 +1230,10 @@ async function leerUnificar(arch){
   const plan=hoja('Plan'),nuevosX=hoja('Nuevos');
   if(!plan.length&&!nuevosX.length){toast('El archivo no tiene las hojas "Plan" ni "Nuevos"');return}
   const porCod=new Map(S.items.map(i=>[String(i.codigo).toUpperCase(),i])),av=[],ren=[],uni=[];
+  const porDesc=new Map(S.items.map(i=>[sinAc(i.descripcion),i])); // renglones sin código: se buscan por la descripción actual
   plan.forEach(r=>{
-    const cod=col(r,'Código','Codigo').toUpperCase();if(!cod)return;
+    const cod=col(r,'Código','Codigo').toUpperCase(),dAct=col(r,'Descripción actual','Descripcion actual');
+    if(!cod){const x=dAct&&porDesc.get(sinAc(dAct)),dn=col(r,'Descripción nueva','Descripcion nueva');if(x&&dn&&dn!==x.descripcion)ren.push({it:x,desc:dn});return}
     const it=porCod.get(cod),acc=sinAc(col(r,'Acción','Accion')),desc=col(r,'Descripción nueva','Descripcion nueva'),dest=col(r,'Unir con').toUpperCase();
     if(!it){av.push(cod+': no está en StockApp, se saltea');return}
     if(acc==='unir'){
