@@ -1,5 +1,5 @@
 rules_version = '2';
-// Reglas de Firestore completas — proyecto tpfapps-5f226 (18/11/2026: Reservas compartidas)
+// Reglas de Firestore completas — proyecto tpfapps-5f226 (19/11/2026: Unificar desde Excel en StockApp)
 // Incluye: ViajesApp, StockApp, ComprasApp, ProducciónApp y ProyectosApp.
 service cloud.firestore {
   match /databases/{database}/documents {
