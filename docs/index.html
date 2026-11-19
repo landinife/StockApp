@@ -594,6 +594,9 @@ const subF=it=>mmPor(it)||packDe(it); // cuántas unidades chicas (mm o sueltas)
 const subU=it=>mmPor(it)?'mm':'un';
 const fmtSub=(it,n)=>mmPor(it)?fmtMm(n):(Math.round(n*100)/100).toLocaleString('es-AR')+' un';
 const conSub=(it,v)=>{const f=subF(it);return f?' · '+fmtSub(it,(v??it.stock)*f):''}; // texto " · 18.000 mm" o " · 30 un" al lado del stock
+/* Pedido en curso: quién lo marcó y, si vino de ComprasApp, el número de OC */
+const quienAhora=()=>({usuario:S.user.nombre||S.user.email,email:S.user.email});
+const quienPed=p=>p?[p.oc||'',p.usuario?'Marcó '+p.usuario:(p.oc?'':'Quién: sin dato')].filter(Boolean).join(' · '):'';
 const reservado=it=>(it.reservas||[]).reduce((a,r)=>a+(r.cantidad||0),0);
 const disponible=it=>Math.round((it.stock-reservado(it))*1000)/1000;
 function estado(it){ // sin stock mínimo cargado no hay aviso de compra; lo reservado no cuenta como disponible
@@ -729,7 +732,7 @@ function vResumen(){
   const pend=lc.filter(i=>!i.pedidoCurso).length; // ítems en mínimo que falta pedir
   const L={rojo:S.items.filter(i=>estado(i)==='rojo'),amarillo:S.items.filter(i=>estado(i)==='amarillo'),ped:S.items.filter(i=>i.pedidoCurso)};
   const caja=(k,cl,t)=>`<button class="caja ${cl}" data-act="caja" data-v="${k}" aria-pressed="${S.caja===k}"><span class="ct"><span>${t}</span>${ic(k)}</span><strong>${L[k].length}</strong></button>`;
-  const det=S.caja?(L[S.caja].length?`<div class="lista">${L[S.caja].sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>`<div class="reng" data-act="ver" data-id="${i.id}" style="cursor:pointer;gap:12px">${tile(i.area,'ch')}<div>${esc(i.descripcion)}<br><small>${esc(i.codigo)} · ${AREAS[i.area].n}${i.proveedor?' · '+esc(i.proveedor):''}</small></div><div class="der">${S.caja==='ped'?`${fmt(i.pedidoCurso.cantidad)} ${esc(i.unidad)}<br><small>pedido ${dia(i.pedidoCurso.fecha)}</small>`:`${fmt(i.stock)} ${esc(i.unidad)}<br><small>mín. ${fmt(i.minimo)}</small>`}</div></div>`).join('')}</div>`:`<div class="vacio">No hay ítems en este grupo.</div>`):'';
+  const det=S.caja?(L[S.caja].length?`<div class="lista">${L[S.caja].sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>`<div class="reng" data-act="ver" data-id="${i.id}" style="cursor:pointer;gap:12px">${tile(i.area,'ch')}<div>${esc(i.descripcion)}<br><small>${esc(i.codigo)} · ${AREAS[i.area].n}${i.proveedor?' · '+esc(i.proveedor):''}${S.caja==='ped'?'<br>'+esc(quienPed(i.pedidoCurso)):''}</small></div><div class="der">${S.caja==='ped'?`${fmt(i.pedidoCurso.cantidad)} ${esc(i.unidad)}<br><small>pedido ${dia(i.pedidoCurso.fecha)}</small>`:`${fmt(i.stock)} ${esc(i.unidad)}<br><small>mín. ${fmt(i.minimo)}</small>`}</div></div>`).join('')}</div>`:`<div class="vacio">No hay ítems en este grupo.</div>`):'';
   let valor='';
   if(S.editor&&S.items.some(i=>i.costo>0)){
     const pa={};let t=0,sin=0,ars=0;S.items.forEach(i=>{const x=i.stock*usd(i);pa[i.area]=(pa[i.area]||0)+x;t+=x;if(!(i.costo>0))sin++;else if(i.moneda==='ARS')ars++});
@@ -760,7 +763,7 @@ function vCompras(){ // contenido de la ventana Lista de compras: ítems en mín
   lc.forEach(i=>{const p=i.proveedor||'Sin proveedor';
     if(p!==prov){prov=p;const g=lc.filter(x=>(x.proveedor||'Sin proveedor')===p&&!x.pedidoCurso);
       lista+=sp&&g.length?`<label class="reng check" style="cursor:pointer"><input type="checkbox" class="spg" data-p="${esc(p)}"${g.every(x=>sp.ids.has(x.id))?' checked':''}><h3>${esc(p)}</h3></label>`:`<div class="reng"><h3>${esc(p)}</h3></div>`}
-    const txt=`${tile(i.area,'ch')}<div>${esc(i.codigo)} · ${esc(i.descripcion)} <small>· ${AREAS[i.area].n}</small><br><small>Stock ${fmt(i.stock)} · mín. ${fmt(i.minimo)}${(i.marcasSug||[]).length?' · Marcas: '+esc(i.marcasSug.join(', ')):''}</small></div><div class="der">${i.pedidoCurso?`<span class="pil ped">Pedido ${dia(i.pedidoCurso.fecha)}</span>`:`pedir <b>${fmt(i.cantPedido)}</b> ${esc(i.unidad)}`}</div>`;
+    const txt=`${tile(i.area,'ch')}<div>${esc(i.codigo)} · ${esc(i.descripcion)} <small>· ${AREAS[i.area].n}</small><br><small>Stock ${fmt(i.stock)} · mín. ${fmt(i.minimo)}${(i.marcasSug||[]).length?' · Marcas: '+esc(i.marcasSug.join(', ')):''}</small></div><div class="der">${i.pedidoCurso?`<span class="pil ped">Pedido ${dia(i.pedidoCurso.fecha)}</span><br><small class="tenue">${esc(quienPed(i.pedidoCurso))}</small>`:`pedir <b>${fmt(i.cantPedido)}</b> ${esc(i.unidad)}`}</div>`;
     lista+=sp&&!i.pedidoCurso?`<label class="reng" style="cursor:pointer;align-items:center;gap:12px"><input type="checkbox" class="sp" data-id="${i.id}"${sp.ids.has(i.id)?' checked':''}>${txt}</label>`:`<div class="reng" data-act="ver" data-v="compras" data-id="${i.id}" style="cursor:pointer;gap:12px">${txt}</div>`});
   if(S.editor&&S.items.some(i=>i.costo>0))lc.forEach(i=>{if(!i.pedidoCurso)est+=i.cantPedido*usd(i)});
   return `<div data-compras class="sec">
@@ -909,7 +912,7 @@ function verItem(id){
     <div class="fila">${pildoras(it)}</div>
     <div class="entre"><span class="stock" style="flex:1;min-width:0">Stock <b>${fmt(it.stock)}</b> ${esc(it.unidad)} <small class="tenue">${subF(it)?conSub(it).slice(3)+' ':''}· mín. ${fmt(it.minimo)}${reservado(it)?'<br>disponible '+fmt(disponible(it))+' '+esc(it.unidad):''}</small></span><span class="fila" style="flex-wrap:nowrap"><button class="sal" data-act="mov" data-v="salida" data-id="${id}">− Salida</button><button class="ent" data-act="mov" data-v="entrada" data-id="${id}">+ Entrada</button></span></div>
     ${nivel(it,1)}
-    ${it.pedidoCurso?`<div class="bloque" style="background:var(--azul-f)"><span>Pedido realizado el ${dia(it.pedidoCurso.fecha)} por ${fmt(it.pedidoCurso.cantidad)} ${esc(it.unidad)}</span><div class="fila"><button class="chico pri" data-act="ingresar" data-id="${id}">Ingresar mercadería</button><button class="chico" data-act="anularPed" data-id="${id}">Anular pedido</button></div></div>`:`<button data-act="pedido" data-id="${id}">Marcar pedido realizado</button>`}
+    ${it.pedidoCurso?`<div class="bloque" style="background:var(--azul-f)"><span>Pedido realizado el ${dia(it.pedidoCurso.fecha)} por ${fmt(it.pedidoCurso.cantidad)} ${esc(it.unidad)}<br><small class="tenue">${esc(quienPed(it.pedidoCurso))}</small></span><div class="fila"><button class="chico pri" data-act="ingresar" data-id="${id}">Ingresar mercadería</button><button class="chico" data-act="anularPed" data-id="${id}">Anular pedido</button></div></div>`:`<button data-act="pedido" data-id="${id}">Marcar pedido realizado</button>`}
     <div class="solapas" role="tablist">${sol('datos','Datos')}${sol('consumo','Consumo')}${sol('movs','Movimientos')}</div>
     <div class="sec" ${pan('datos')}>
     <div class="sec" style="gap:0"><div class="entre"><h3>Reservas</h3><button class="chico res" data-act="reservar" data-id="${id}">Reservar</button></div>
@@ -1273,7 +1276,7 @@ document.addEventListener('click',async e=>{
   else if(act==='selCancelar'){S.selPed=null;pintarCompras()}
   else if(act==='selTodos'){compras().filter(i=>!i.pedidoCurso).forEach(i=>S.selPed.ids.add(i.id));pintarCompras()}
   else if(act==='selGuardar'){const sp=S.selPed;if(!sp.ids.size){toast('Elegí al menos un ítem');return}if(!sp.fecha){toast('Elegí la fecha del pedido');return}
-    const f=new Date(sp.fecha+'T12:00').getTime(),n=sp.ids.size;sp.ids.forEach(id=>{const it=item(id);if(it)DB.patchItem(id,{pedidoCurso:{fecha:f,cantidad:it.cantPedido}})});S.selPed=null;pintarCompras();toast(n+' ítem(s) marcados como pedido')}
+    const f=new Date(sp.fecha+'T12:00').getTime(),n=sp.ids.size;sp.ids.forEach(id=>{const it=item(id);if(it)DB.patchItem(id,{pedidoCurso:Object.assign({fecha:f,cantidad:it.cantPedido},quienAhora())})});S.selPed=null;pintarCompras();toast(n+' ítem(s) marcados como pedido')}
   else if(act==='backup')hacerBackup();
   else if(act==='hMes'){const n=S.hist.fin+(+d.v);if(n>mesDe(Date.now())){toast('Todavía no hay datos de ese mes');return}S.hist.fin=n;pintaHist()}
   else if(act==='nombreUsuario'){const u=S.usuarios.find(x=>x.email===d.v);const n=await pedir('Nombre que se muestra en los movimientos',u&&u.nombre);if(n){DB.usuario(d.v,{nombre:n});toast('Nombre actualizado')}}
@@ -1350,7 +1353,7 @@ document.addEventListener('submit',e=>{
     toast((d.tipo==='entrada'?'Entrada':'Salida')+' registrada');d.vuelve==='r'?modalRapido(d.tipo):d.vuelve?verItem(d.id):cerrar();
   }else if(tipo==='pedido'){
     const c=num(d.cantidad);if(c<=0||!d.fecha){$('#pd-err').textContent='Completá la fecha y una cantidad mayor que cero.';return}
-    DB.patchItem(d.id,{pedidoCurso:{fecha:new Date(d.fecha+'T12:00').getTime(),cantidad:c}});toast('Pedido guardado');verItem(d.id);
+    DB.patchItem(d.id,{pedidoCurso:Object.assign({fecha:new Date(d.fecha+'T12:00').getTime(),cantidad:c},quienAhora())});toast('Pedido guardado');verItem(d.id);
   }else if(tipo==='hist')verHistorial(d.id||null,d.desde,d.hasta);
   else if(tipo==='login')DB.loginClave(d.email.trim(),d.clave);
   else if(tipo==='usuario'){
@@ -1530,7 +1533,7 @@ addEventListener('pagehide',guardaPendientes);
 
 /* ---------- Datos: modo de prueba (sin Firebase) ---------- */
 function demoDB(){
-  const K='stockapp-demo-7';let D;
+  const K='stockapp-demo-8';let D;
   const guardar=()=>{try{localStorage.setItem(K,JSON.stringify(D))}catch(_){}};
   function ejemplo(){
     S.cfg=normCfg({});S.items=[];S.movs=[];
@@ -1540,13 +1543,13 @@ function demoDB(){
     const a=mk('panol','Disco de corte 115 x 1 mm',['Herramientas e insumos'],{stock:8,minimo:10,cantPedido:50,marca:'Marca A',marcasSug:['Marca A','Marca B'],proveedor:'Ferrenet',ubicacion:'Estante B2'});
     mk('panol','Electrodo inoxidable 2,5 mm',['Herramientas e insumos'],{unidad:'Kg',stock:5.5,minimo:5,cantPedido:10,proveedor:'Ferrenet',ubicacion:'Estante B1'});
     mk('panol','Guante de nitrilo talle 9',['Herramientas e insumos'],{unidad:'Par',stock:40,minimo:12,cantPedido:24,ubicacion:'Estante A1'});
-    mk('panol','Bulón inoxidable M8 x 25',['Fijaciones'],{stock:120,minimo:100,cantPedido:500,proveedor:'Abul',ubicacion:'Gaveta 14',pedidoCurso:{fecha:ahora-48*h,cantidad:500}});
+    mk('panol','Bulón inoxidable M8 x 25',['Fijaciones'],{stock:120,minimo:100,cantPedido:500,proveedor:'Abul',ubicacion:'Gaveta 14',pedidoCurso:{fecha:ahora-48*h,cantidad:500,usuario:'Facundo Cuello'}});
     const b=mk('aceros','Chapa inoxidable 2 mm',['Inoxidable','Chapa'],{stock:3,minimo:4,cantPedido:6,material:'AISI 304',formato:'Chapa',medidas:{espesor:2,diametro:0,ancho:1500,largo:3000},proveedor:'Sidinox',ubicacion:'Rack 1'});
     mk('aceros','Barra redonda inoxidable 25 mm',['Inoxidable','Barra redonda'],{stock:9,minimo:4,cantPedido:6,material:'AISI 304',formato:'Barra redonda',medidas:{espesor:0,diametro:25,ancho:0,largo:6000},proveedor:'Sidinox',ubicacion:'Rack 3'});
     mk('noferrosos','Barra redonda de bronce 40 mm',['Bronce','Barra redonda'],{stock:3,minimo:1,cantPedido:2,material:'Bronce SAE 40',formato:'Barra redonda',medidas:{espesor:0,diametro:40,ancho:0,largo:0},proveedor:'Lexmetales',ubicacion:'Rack 4'});
-    mk('componentes','Motorreductor 0,37 kW',['Motores / Reductores y variadores'],{stock:1,minimo:1,cantPedido:1,marca:'SEW',proveedor:'SEW',ubicacion:'Estante C1'});
+    mk('componentes','Motorreductor 0,37 kW',['Motores / Reductores y variadores'],{stock:1,minimo:1,cantPedido:1,pedidoCurso:{fecha:ahora-24*h,cantidad:1,oc:'OC 2611-004',usuario:'Federico'},marca:'SEW',proveedor:'SEW',ubicacion:'Estante C1'});
     const c=mk('plasticos','Placa UHMW 10 mm',['UHMW','Placa'],{stock:6,minimo:2,cantPedido:4,material:'UHMW',formato:'Placa',medidas:{espesor:10,diametro:0,ancho:1000,largo:2000},proveedor:'Extruplast',ubicacion:'Rack 5'});
-    mk('plasticos','Barra de acetal 50 mm',['Acetal','Barra redonda'],{stock:2,minimo:2,cantPedido:5,material:'Acetal',formato:'Barra redonda',medidas:{espesor:0,diametro:50,ancho:0,largo:1000},proveedor:'Extruplast',ubicacion:'Rack 5'});
+    mk('plasticos','Barra de acetal 50 mm',['Acetal','Barra redonda'],{stock:2,minimo:2,cantPedido:5,material:'Acetal',formato:'Barra redonda',medidas:{espesor:0,diametro:50,ancho:0,largo:1000},proveedor:'Extruplast',ubicacion:'Rack 5',pedidoCurso:{fecha:ahora-120*h,cantidad:5}});
     const mv=(it,tipo,cant,motivo,ref,t)=>S.movs.push({id:uid(),itemId:it.id,codigo:it.codigo,descripcion:it.descripcion,area:it.area,unidad:it.unidad,tipo,cantidad:cant,motivo,ref,usuario:'Ejemplo',fecha:ahora-t*h});
     mv(a,'salida',4,'Consumo de producción','OV 1024',2);mv(c,'entrada',4,'Compra','OC 311',26);mv(b,'salida',1,'Consumo de producción','Proyecto ejemplo',50);
     S.cfg.dolar=1000; // valor de ejemplo
