@@ -1272,7 +1272,7 @@ async function leerUnificar(arch){
 async function aplicarUnificar(){
   const U=S.uni;if(!U)return;S.uni=null;
   abrir('<div class="centro" style="min-height:0"><h2>Aplicando cambios…</h2><small class="tenue">No cierres la app.</small></div>');
-  let n={ren:0,uni:0,nue:0},err=0;const ahora=Date.now(),piso={};for(const a in AREAS)piso[a]=maxCodigo(a); // códigos más altos antes de borrar: no se reusan
+  let n={ren:0,uni:0,nue:0},err='';const ahora=Date.now(),piso={};for(const a in AREAS)piso[a]=maxCodigo(a); // códigos más altos antes de borrar: no se reusan
   try{
     U.ren.forEach(x=>{DB.patchItem(x.it.id,{descripcion:x.desc,actualizado:ahora});n.ren++});
     for(const u of U.uni){const s=item(u.s.id),k=item(u.k.id);if(!s||!k)continue;
@@ -1289,8 +1289,8 @@ async function aplicarUnificar(){
       for(const a in porA){const cods=await DB.sigCodigos(a,porA[a].length,piso[a]);porA[a].forEach((it,i)=>it.codigo=cods[i])} // contador compartido con ComprasApp
       normCfg(S.cfg);guardarCfg();DB.importar(r0.nuevos);n.nue=r0.nuevos.length;
     }
-  }catch(e){err++;console.error(e)}
-  abrir(`<h2>${err?'Unificación incompleta':'Unificación terminada'}</h2><p>Renombrados: <b>${n.ren}</b><br>Unidos: <b>${n.uni}</b><br>Nuevos: <b>${n.nue}</b></p>${err?'<p class="err">Hubo un error a mitad de camino (¿sin conexión?). Volvé a subir el mismo archivo: lo que ya se hizo no se repite.</p>':''}<button class="pri" data-act="cerrar">Aceptar</button>`);
+  }catch(e){err=e.message||String(e);console.error(e)}
+  abrir(`<h2>${err?'Unificación incompleta':'Unificación terminada'}</h2><p>Renombrados: <b>${n.ren}</b><br>Unidos: <b>${n.uni}</b><br>Nuevos: <b>${n.nue}</b></p>${err?`<p class="err">${esc(err)}</p><small class="tenue">Cuando lo resuelvas, volvé a subir el mismo archivo: lo que ya se hizo no se repite.</small>`:''}<button class="pri" data-act="cerrar">Aceptar</button>`);
   render();
 }
 async function bajarExcel(tipo){
@@ -1728,9 +1728,11 @@ function fireDB(){
     borrarReserva(id){fs.collection('empresa_reservas').doc(id).delete().catch(e=>toast('No se pudo borrar ('+e.code+')'))},
     marcarAnulado(id,p){fs.collection('stockapp_movimientos').doc(id).update(p).catch(fallo)},
     async unirItems(s,k,p){ // une s en k: suma el stock, pasa reservas y pedido (en p), borra s y pasa su historial de movimientos a k
-      const b=fs.batch();b.update(fs.collection('stockapp_items').doc(k.id),Object.assign({},p,{stock:inc(s.stock||0)}));b.delete(fs.collection('stockapp_items').doc(s.id));await b.commit();
+      // primero el historial: si las reglas de Firebase no lo permiten, se corta acá sin haber borrado nada
       const ms=await fs.collection('stockapp_movimientos').where('itemId','==',s.id).get();
-      for(let i=0;i<ms.docs.length;i+=400){const c=fs.batch();ms.docs.slice(i,i+400).forEach(d=>c.update(d.ref,{itemId:k.id,codigo:k.codigo,descripcion:k.descripcion,unidoDe:s.codigo}));await c.commit()}},
+      try{for(let i=0;i<ms.docs.length;i+=400){const c=fs.batch();ms.docs.slice(i,i+400).forEach(d=>c.update(d.ref,{itemId:k.id,codigo:k.codigo,descripcion:k.descripcion,unidoDe:s.codigo}));await c.commit()}}
+      catch(e){throw new Error(s.codigo+': no se pudo pasar su historial a '+k.codigo+' ('+e.code+'). Falta publicar las reglas nuevas de Firebase.')}
+      const b=fs.batch();b.update(fs.collection('stockapp_items').doc(k.id),Object.assign({},p,{stock:inc(s.stock||0)}));b.delete(fs.collection('stockapp_items').doc(s.id));await b.commit()},
     async todo(){const [i,m,c]=await Promise.all([fs.collection('stockapp_items').get(),fs.collection('stockapp_movimientos').get(),fs.doc('stockapp_config/general').get()]);return {cfg:c.data()||{},items:lee(i),movs:lee(m)}},
     async restaurar(d){
       const [ei,em]=await Promise.all([fs.collection('stockapp_items').get(),fs.collection('stockapp_movimientos').get()]),hay=new Set(em.docs.map(x=>x.id)),quedan=new Set(d.items.map(i=>i.id)),ops=[];

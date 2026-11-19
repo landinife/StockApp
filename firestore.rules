@@ -68,10 +68,12 @@ service cloud.firestore {
     }
     match /stockapp_movimientos/{doc} {
       allow read, create: if stockOk();
-      // Solo se puede marcar como anulado (quien lo cargó o un editor); nunca borrar.
+      // Solo se puede marcar como anulado (quien lo cargó o un editor) o, un editor, pasar el historial al unir ítems; nunca borrar.
       allow update: if stockOk()
         && (stockEditor() || resource.data.email == request.auth.token.email)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['anulado', 'anuladoPor', 'anuladoFecha']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['anulado', 'anuladoPor', 'anuladoFecha'])
+        // StockApp, Unificar desde Excel: un editor pasa el historial de un ítem que se une a otro
+        || stockEditor() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['itemId', 'codigo', 'descripcion', 'unidoDe']);
       allow delete: if false;
     }
 
