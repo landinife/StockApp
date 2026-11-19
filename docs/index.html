@@ -544,6 +544,52 @@ function columnas(v,et,sel,o){ // columnas de una sola serie; o:{w,h,mini,dentro
         :(es&&x>0?`<text x="${Math.min(W-30,Math.max(30,sl*i+sl/2))}" y="${Math.max(11,y-5)}" text-anchor="middle" font-size="11" font-weight="600" fill="var(--texto)">${esc(o.f(x))}</text>`:'')))+`</g>`});
   return s+`</svg>`;
 }
+/* ---------- Barras y mm: el stock se guarda en barras (o en m) y la app calcula los mm ----------
+   Cuentan como barra todos los formatos de Aceros, No ferrosos y Plásticos menos chapas, hojas y placas.
+   Largo de la barra: el del ítem (medidas.largo); si falta, el estándar de Configuración; si tampoco, el de la sección. */
+const LARGO_DEF={aceros:6000,noferrosos:3000,plasticos:1000};
+const formatoItem=it=>{const c=catDe(it),s=c&&(c.subs||[]).find(x=>x.id===it.subId);return s?s.nombre:(it.formato||'')};
+const esBarraF=(area,f)=>!!(AREAS[area]&&AREAS[area].tec)&&!/^(chapa|hoja|placa)/.test(sinAc(f));
+const largoStd=(area,f)=>((stdDe(area,f)||{}).largo)||LARGO_DEF[area]||0;
+const largoBarra=it=>num((it.medidas||{}).largo)||largoStd(it.area,formatoItem(it));
+function mmPor(it){ // cuántos mm representa 1 unidad de stock; 0 si el ítem no se mide en mm
+  if(!it||!esBarraF(it.area,formatoItem(it)))return 0;
+  const u=sinAc(it.unidad||'un');
+  if(/^(m|mt|mts|metro|metros)$/.test(u))return 1000;
+  if(/^(un|u|unidad|unidades|barra|barras|tira|tiras)$/.test(u))return largoBarra(it);
+  return 0; // Kg u otra unidad: no se pasa a mm
+}
+/* Medidas que pide cada formato en la ficha (las demás se ocultan y no se guardan). Sin formato: se ven todas */
+function camposDe(f){
+  const t=sinAc(f);
+  if(/^barra cuadrada|^cuadrad/.test(t))return {diametro:'Lado',largo:'Largo de la barra'};
+  if(/^barra|^redond|^macizo/.test(t))return {diametro:'Diámetro',largo:'Largo de la barra'};
+  if(/^(cano|tubo|buje)/.test(t))return {diametro:'Diámetro exterior',espesor:'Espesor de pared',dint:'Diámetro interior',largo:'Largo de la barra'};
+  if(/^(perfil|angulo)/.test(t))return {ancho:'Ancho del ala',espesor:'Espesor',largo:'Largo de la barra'};
+  if(/^planchuela/.test(t))return {ancho:'Ancho',espesor:'Espesor',largo:'Largo de la barra'};
+  if(/^(chapa|hoja|placa)/.test(t))return {espesor:'Espesor',ancho:'Ancho',largo:'Largo'};
+  return null;
+}
+const CAMPOS_M={espesor:'Espesor',diametro:'Diámetro o lado',dint:'Diámetro interior',ancho:'Ancho',largo:'Largo'}; // dint no se guarda: sale de exterior − 2 × espesor
+const fmtN=n=>String(Math.round(n*1000)/1000).replace('.',','); // número para escribir en un campo
+function enlazarDiam(id){ // caños, tubos y bujes: interior = exterior − 2 × espesor. Se recalcula el que no se está escribiendo
+  const de=num($('#i-diam').value),e=$('#i-esp'),di=$('#i-dint');if(!e||!di)return;
+  if(id==='i-dint'){const v=num(di.value);e.value=de>0&&di.value.trim()!==''&&v<de?fmtN((de-v)/2):e.value}
+  else di.value=de>0&&num(e.value)>0&&de-2*num(e.value)>0?fmtN(de-2*num(e.value)):'';
+}
+function ponerCamposM(){ // muestra en la ficha solo las medidas del formato elegido, con su nombre
+  const sub=$('#i-sub'),w=$('#i-med');if(!sub||!w)return;
+  const c=cats($('#i-area').value).find(x=>x.id===$('#i-cat').value),sc=c&&(c.subs||[]).find(x=>x.id===sub.value),k=sc?camposDe(sc.nombre):null;
+  Object.keys(CAMPOS_M).forEach(n=>{const l=w.querySelector(`[data-m=${n}]`);if(!l)return;l.hidden=k?!k[n]:n==='dint';l.style.order=k&&k[n]?Object.keys(k).indexOf(n):'';l.firstChild.textContent=((k&&k[n])||CAMPOS_M[n])+' (mm)'});
+}
+const fmtMm=n=>Math.round(n).toLocaleString('es-AR')+' mm';
+const stockMm=it=>{const f=mmPor(it);return f?Math.round(it.stock*f):null}; // lo que puede leer ProducciónApp
+/* Packs (Pañol y Componentes): el stock va en la unidad de compra (caja, pack) y la app muestra las unidades sueltas */
+const packDe=it=>it&&!(AREAS[it.area]&&AREAS[it.area].tec)&&num(it.porPack)>1?num(it.porPack):0;
+const subF=it=>mmPor(it)||packDe(it); // cuántas unidades chicas (mm o sueltas) hay en 1 unidad de stock
+const subU=it=>mmPor(it)?'mm':'un';
+const fmtSub=(it,n)=>mmPor(it)?fmtMm(n):(Math.round(n*100)/100).toLocaleString('es-AR')+' un';
+const conSub=(it,v)=>{const f=subF(it);return f?' · '+fmtSub(it,(v??it.stock)*f):''}; // texto " · 18.000 mm" o " · 30 un" al lado del stock
 const reservado=it=>(it.reservas||[]).reduce((a,r)=>a+(r.cantidad||0),0);
 const disponible=it=>Math.round((it.stock-reservado(it))*1000)/1000;
 function estado(it){ // sin stock mínimo cargado no hay aviso de compra; lo reservado no cuenta como disponible
@@ -563,7 +609,7 @@ const ETI={rojo:'Realizar compra',amarillo:'Cerca del mínimo',verde:'Normal'};
 function pildoras(it){const e=estado(it);return (it.minimo>0?`<span class="pil ${e}">${ETI[e]}</span>`:`<span class="pil" style="background:var(--panel2);color:var(--tenue)">Sin mínimo</span>`)+(it.pedidoCurso?` <span class="pil ped">Pedido en curso</span>`:'')}
 function medidas(it){
   const m=it.medidas||{},p=[];
-  if(m.diametro)p.push('Ø '+fmt(m.diametro)); if(m.espesor)p.push(fmt(m.espesor)); if(m.ancho)p.push(fmt(m.ancho)); if(m.largo)p.push(fmt(m.largo));
+  if(m.diametro)p.push((/^(barra cuadrada|cuadrad)/.test(sinAc(formatoItem(it)))?'□ ':'Ø ')+fmt(m.diametro)); if(m.espesor)p.push(fmt(m.espesor)); if(m.ancho)p.push(fmt(m.ancho)); if(m.largo)p.push(fmt(m.largo));
   return [it.subId?'':it.formato,it.material,p.length?p.join(' × ')+' mm':''].filter(Boolean).join(' · ');
 }
 function maxCodigo(area){ // número más alto ya usado en la sección
@@ -661,7 +707,7 @@ function alDato(){ // llega un cambio de datos
 function puedeAnular(m){return !m.anulado&&m.motivo!=='Anulación'&&m.motivo!=='Stock inicial'&&!!m.id&&(S.editor||(m.email?m.email===S.user.email:m.usuario===S.user.nombre))}
 function filaMov(m,conItem,sinAnular){
   const s=m.tipo==='entrada';if(m.id)S.movIdx[m.id]=m;
-  return `<div class="reng${m.anulado?' anul':''}" style="gap:12px"><span class="mi ${s?'e':'s'}">${ic(s?'entrada':'salida')}</span><div><span style="color:var(--${s?'verde':'rojo'})">${s?'Entrada':'Salida'}</span>${conItem?' · '+esc(m.codigo)+' '+esc(m.descripcion):''}<br><small>${esc(m.motivo)}${m.ref?' · '+esc(m.ref):''}</small><br><small>Registró: <span style="color:var(--texto)">${esc(m.usuario||'Sin dato')}</span></small>${m.anulado?`<br><small style="color:var(--amar)">Anulado por ${esc(m.anuladoPor||'')} el ${fecha(m.anuladoFecha||0)}</small>`:''}</div><div class="der"><span class="cant">${s?'+':'−'}${fmt(m.cantidad)} ${esc(m.unidad||'')}</span><br><small>${fecha(m.fecha)}</small>${!sinAnular&&puedeAnular(m)?`<br><button class="chico" data-act="anular" data-id="${m.id}" style="margin-top:4px">Anular</button>`:''}</div></div>`;
+  return `<div class="reng${m.anulado?' anul':''}" style="gap:12px"><span class="mi ${s?'e':'s'}">${ic(s?'entrada':'salida')}</span><div><span style="color:var(--${s?'verde':'rojo'})">${s?'Entrada':'Salida'}</span>${conItem?' · '+esc(m.codigo)+' '+esc(m.descripcion):''}<br><small>${esc(m.motivo)}${m.ref?' · '+esc(m.ref):''}</small><br><small>Registró: <span style="color:var(--texto)">${esc(m.usuario||'Sin dato')}</span></small>${m.anulado?`<br><small style="color:var(--amar)">Anulado por ${esc(m.anuladoPor||'')} el ${fecha(m.anuladoFecha||0)}</small>`:''}</div><div class="der"><span class="cant">${s?'+':'−'}${fmt(m.cantidad)} ${esc(m.unidad||'')}</span>${m.mm?`<br><small>${fmtMm(m.mm)}</small>`:m.sueltas?`<br><small>${fmt(m.sueltas)} un</small>`:''}<br><small>${fecha(m.fecha)}</small>${!sinAnular&&puedeAnular(m)?`<br><button class="chico" data-act="anular" data-id="${m.id}" style="margin-top:4px">Anular</button>`:''}</div></div>`;
 }
 async function anularMov(id){
   const m=S.movIdx[id],it=m&&item(m.itemId);if(!m)return;if(!it){toast('Ese ítem ya no existe');return}
@@ -787,7 +833,7 @@ function guardaPendientes(){ // guarda lo que haya quedado escrito sin salir del
 }
 function pintaConteo(){ // pone al día el "Sistema" y el estado de cada renglón sin redibujar la lista (así no se pierde el cursor)
   if(!S.conteo)return;
-  document.querySelectorAll('#lista input.ct').forEach(e=>{const id=e.dataset.id,it=item(id),s=$('#sis-'+id);if(it&&s)s.textContent=fmt(it.stock);pintaDif(id)});
+  document.querySelectorAll('#lista input.ct').forEach(e=>{const id=e.dataset.id,it=item(id),s=$('#sis-'+id),sm=$('#smm-'+id);if(it&&s)s.textContent=fmt(it.stock);if(it&&sm)sm.textContent=conSub(it).slice(3);pintaDif(id)});
   resumenConteo();
 }
 const ORD={codigo:i=>i.codigo,descripcion:i=>i.descripcion.toLowerCase(),cat:i=>rutaCat(i).toLowerCase(),marca:i=>(i.marca||'').toLowerCase(),stock:i=>i.stock,minimo:i=>i.minimo,estado:i=>({rojo:0,amarillo:1,verde:2}[estado(i)])};
@@ -801,7 +847,7 @@ function renderLista(){
   if(S.conteo&&S.conteo.area===a){ // relevamiento: ordenado por ubicación para recorrer el depósito
     const v=S.conteo.vals;l.sort((x,y)=>(x.ubicacion||'~').localeCompare(y.ubicacion||'~','es',{numeric:true})||x.codigo.localeCompare(y.codigo));
     el.innerHTML=`<div class="sec">`+l.map(i=>`<div class="tarj cont"><div><span class="t">${esc(i.descripcion)}</span><br><small class="tenue">${esc(i.codigo)}${i.ubicacion?' · '+esc(i.ubicacion):''}${medidas(i)?' · '+esc(medidas(i)):''}</small></div>
-      <div class="entre"><span>Sistema <b id="sis-${i.id}">${fmt(i.stock)}</b> ${esc(i.unidad)}</span><span class="fila" style="flex-wrap:nowrap;gap:6px"><input class="ct" id="ct-${i.id}" data-id="${i.id}" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="Contado" aria-label="Cantidad contada de ${esc(i.descripcion)}" value="${esc(v[i.id]??'')}"><button class="sig" data-act="calc" data-id="${i.id}" aria-label="Calculadora para ${esc(i.descripcion)}" title="Calculadora"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15v2.5M8.5 18h.01M12 18h.01"/></svg></button></span></div>
+      <div class="entre"><span>Sistema <b id="sis-${i.id}">${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?`<br><small class="tenue" id="smm-${i.id}">${conSub(i).slice(3)}</small>`:''}</span><span class="fila" style="flex-wrap:nowrap;gap:6px"><input class="ct" id="ct-${i.id}" data-id="${i.id}" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="Contado" aria-label="Cantidad contada de ${esc(i.descripcion)}" value="${esc(v[i.id]??'')}"><button class="sig" data-act="calc" data-id="${i.id}" aria-label="Calculadora para ${esc(i.descripcion)}" title="Calculadora"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15v2.5M8.5 18h.01M12 18h.01"/></svg></button></span></div>
       <div class="dif" id="df-${i.id}" aria-live="polite"></div></div>`).join('')+
       `<div class="barra"><span id="ct-res"></span><span class="fila"><button class="pri" data-act="conteoGuardar">Terminar</button></span></div></div>`;
     l.forEach(i=>pintaDif(i.id));resumenConteo();return;
@@ -811,11 +857,11 @@ function renderLista(){
   if(matchMedia('(min-width:900px)').matches){
     const th=(k,n,c)=>`<th data-act="orden" data-v="${k}"${c?' class="n"':''}>${n}${f.orden===k?(f.dir>0?' ▲':' ▼'):''}</th>`;
     el.innerHTML=`<div class="tabla"><table><thead><tr>${th('estado','Estado')}${th('codigo','Código')}${th('descripcion','Descripción')}${th('cat','Categoría')}${th('marca','Marca')}${th('stock','Stock',1)}${th('minimo','Mín.',1)}<th>Ubicación</th><th></th></tr></thead><tbody>`+
-      conGrupos(l,cabFila,i=>`<tr data-act="${sm?'selItem':'ver'}" data-id="${i.id}"${es(i)?' class="elegido"':''}><td>${pildoras(i)}</td><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${medidas(i)?'<br><small class="tenue">'+esc(medidas(i))+'</small>':''}</td><td>${esc(rutaCat(i))}</td><td>${esc(i.marca||'')}</td><td class="n"><b>${fmt(i.stock)}</b> ${esc(i.unidad)}<div style="width:96px;margin:7px 0 2px auto">${nivel(i)}</div></td><td class="n">${fmt(i.minimo)}</td><td>${esc(i.ubicacion||'')}</td><td>${bot(i)}</td></tr>`)+`</tbody></table></div>`;
+      conGrupos(l,cabFila,i=>`<tr data-act="${sm?'selItem':'ver'}" data-id="${i.id}"${es(i)?' class="elegido"':''}><td>${pildoras(i)}</td><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${medidas(i)?'<br><small class="tenue">'+esc(medidas(i))+'</small>':''}</td><td>${esc(rutaCat(i))}</td><td>${esc(i.marca||'')}</td><td class="n"><b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?`<br><small class="tenue">${conSub(i).slice(3)}</small>`:''}<div style="width:96px;margin:7px 0 2px auto">${nivel(i)}</div></td><td class="n">${fmt(i.minimo)}</td><td>${esc(i.ubicacion||'')}</td><td>${bot(i)}</td></tr>`)+`</tbody></table></div>`;
   }else{
     el.innerHTML=`<div class="sec">`+conGrupos(l,cabTarj,i=>`<div class="tarj${es(i)?' elegido':''}" data-act="${sm?'selItem':'ver'}" data-id="${i.id}"><div class="entre" style="align-items:flex-start"><span class="t">${esc(i.descripcion)}</span><span class="fila" style="justify-content:flex-end">${pildoras(i)}</span></div>
       <small class="tenue">${esc(i.codigo)} · ${esc(rutaCat(i))}${i.ubicacion?' · '+esc(i.ubicacion):''}${medidas(i)?'<br>'+esc(medidas(i)):''}</small>
-      <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)} <small class="tenue">· mín. ${fmt(i.minimo)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`)+`</div>`;
+      <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?` <small class="tenue">${conSub(i).slice(3)}</small>`:''} <small class="tenue">· mín. ${fmt(i.minimo)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`)+`</div>`;
   }
   if(sm){const n=S.sel.ids.size;el.insertAdjacentHTML('beforeend',`<div class="barra" style="margin-top:12px"><span><b>${n}</b> seleccionado${n===1?'':'s'}</span><span class="fila"><button class="chico" data-act="selVis">Todos los visibles</button><button class="chico" data-act="selNada">Ninguno</button><button class="chico pri" data-act="selEditar">Editar</button><button class="chico pel" data-act="selBorrar">Eliminar</button></span></div>`)}
 }
@@ -851,7 +897,7 @@ function verItem(id){
     <div class="entre" style="align-items:flex-start"><div class="fila" style="flex-wrap:nowrap;gap:12px;align-items:center">${tile(it.area)}<div><small class="tenue">${esc(it.codigo)} · ${AREAS[it.area].n}</small><h2>${esc(it.descripcion)}</h2></div></div>${S.desdeCompras?'<button class="chico" data-act="compras">Volver</button>':'<button class="chico" data-act="cerrar">Cerrar</button>'}</div>
     ${S.editor?`<div class="fila"><button class="chico" data-act="editar" data-id="${id}">Editar datos</button><button class="chico pel" data-act="borrar" data-id="${id}">Eliminar</button></div>`:''}
     <div class="fila">${pildoras(it)}</div>
-    <div class="entre"><span class="stock" style="flex:1;min-width:0">Stock <b>${fmt(it.stock)}</b> ${esc(it.unidad)} <small class="tenue">· mín. ${fmt(it.minimo)}${reservado(it)?'<br>disponible '+fmt(disponible(it))+' '+esc(it.unidad):''}</small></span><span class="fila" style="flex-wrap:nowrap"><button class="sal" data-act="mov" data-v="salida" data-id="${id}">− Salida</button><button class="ent" data-act="mov" data-v="entrada" data-id="${id}">+ Entrada</button></span></div>
+    <div class="entre"><span class="stock" style="flex:1;min-width:0">Stock <b>${fmt(it.stock)}</b> ${esc(it.unidad)} <small class="tenue">${subF(it)?conSub(it).slice(3)+' ':''}· mín. ${fmt(it.minimo)}${reservado(it)?'<br>disponible '+fmt(disponible(it))+' '+esc(it.unidad):''}</small></span><span class="fila" style="flex-wrap:nowrap"><button class="sal" data-act="mov" data-v="salida" data-id="${id}">− Salida</button><button class="ent" data-act="mov" data-v="entrada" data-id="${id}">+ Entrada</button></span></div>
     ${nivel(it,1)}
     ${it.pedidoCurso?`<div class="bloque" style="background:var(--azul-f)"><span>Pedido realizado el ${dia(it.pedidoCurso.fecha)} por ${fmt(it.pedidoCurso.cantidad)} ${esc(it.unidad)}</span><div class="fila"><button class="chico pri" data-act="ingresar" data-id="${id}">Ingresar mercadería</button><button class="chico" data-act="anularPed" data-id="${id}">Anular pedido</button></div></div>`:`<button data-act="pedido" data-id="${id}">Marcar pedido realizado</button>`}
     <div class="solapas" role="tablist">${sol('datos','Datos')}${sol('consumo','Consumo')}${sol('movs','Movimientos')}</div>
@@ -859,7 +905,7 @@ function verItem(id){
     <div class="sec" style="gap:0"><div class="entre"><h3>Reservas</h3><button class="chico res" data-act="reservar" data-id="${id}">Reservar</button></div>
       ${(it.reservas||[]).length?`<div class="lista">${it.reservas.map(r=>`<div class="reng" style="align-items:center"><div>${esc(nomR(r))}${cliR(r)?` <small class="tenue">· ${esc(cliR(r))}</small>`:''}<br><small>${r.oc?esc(r.oc)+' · ':''}${fmt(r.cantidad)} ${esc(it.unidad)} · ${dia(r.fecha)}${r.usuario?' · '+esc(r.usuario):''}</small></div><span class="fila" style="justify-content:flex-end"><button class="chico pri" data-act="usarRes" data-id="${id}" data-v="${r.id}">Usar</button><button class="chico" data-act="editRes" data-id="${id}" data-v="${r.id}">Editar</button><button class="chico pel" data-act="quitarRes" data-id="${id}" data-v="${r.id}">Quitar</button></span></div>`).join('')}</div>
       <small class="tenue" style="margin-top:6px">Reservado ${fmt(reservado(it))} ${esc(it.unidad)} · disponible ${fmt(disponible(it))} ${esc(it.unidad)}</small>`:'<small class="tenue">Nada reservado. Reservá cantidad para un proyecto o repuesto y deja de contar como disponible. Lo que no está reservado es stock de libre uso.</small>'}</div>
-    <dl class="datos">${fila('Categoría',rutaCat(it))}${fila('Stock mínimo',fmt(it.minimo)+' '+it.unidad)}${fila('Stock de pedido',fmt(it.cantPedido)+' '+it.unidad)}${fila('Material y medidas',medidas(it))}${fila('Marca actual',it.marca)}${fila('Marcas sugeridas',(it.marcasSug||[]).join(', '))}${fila('Proveedor',it.proveedor)}${S.editor&&it.costo>0?fila('Costo unitario',(it.moneda==='ARS'?'$ ':'USD ')+fmt(it.costo)+' por '+it.unidad)+fila('Valor en stock',fUSD(it.stock*usd(it))):''}${fila('Ubicación',it.ubicacion)}${fila('Observaciones',it.obs)}</dl></div>
+    <dl class="datos">${fila('Categoría',rutaCat(it))}${fila('Stock mínimo',fmt(it.minimo)+' '+it.unidad)}${fila('Stock de pedido',fmt(it.cantPedido)+' '+it.unidad)}${fila('Material y medidas',medidas(it))}${packDe(it)?fila('Viene en',esc(it.unidad)+' de '+fmt(packDe(it))+' un'):''}${mmPor(it)&&!/^(m|mt|mts|metro|metros)$/.test(sinAc(it.unidad))?fila('Largo de barra',fmtMm(largoBarra(it))+(num((it.medidas||{}).largo)?'':' (estándar)')):''}${fila('Marca actual',it.marca)}${fila('Marcas sugeridas',(it.marcasSug||[]).join(', '))}${fila('Proveedor',it.proveedor)}${S.editor&&it.costo>0?fila('Costo unitario',(it.moneda==='ARS'?'$ ':'USD ')+fmt(it.costo)+' por '+it.unidad)+fila('Valor en stock',fUSD(it.stock*usd(it))):''}${fila('Ubicación',it.ubicacion)}${fila('Observaciones',it.obs)}</dl></div>
     <div class="sec" style="gap:8px" ${pan('consumo')}><div class="entre"><h3>Consumo mensual</h3><span class="fila" style="flex-wrap:nowrap"><button class="chico" data-act="hMes" data-v="-1" aria-label="Meses anteriores">‹</button><small id="it-rango" class="tenue" style="min-width:104px;text-align:center"></small><button class="chico" data-act="hMes" data-v="1" aria-label="Meses siguientes">›</button></span></div>
       <div id="it-graf"><small class="tenue">Cargando…</small></div></div>
     <div class="sec" style="gap:0" ${pan('movs')}><div class="entre"><h3>Movimientos</h3><button class="chico" data-act="historial" data-id="${id}">Filtrar por fechas</button></div><div id="it-movs" class="lista"></div></div>
@@ -902,7 +948,7 @@ function formItem(area,id){
   const dl=(n,l)=>`<datalist id="${n}">${l.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`;
   const matL=selMaterial(a,it.material||'');
   const tec=AREAS[a].tec?`${matL}
-    <div class="dos"><label>Espesor (mm)<input name="espesor" inputmode="decimal" value="${m.espesor||''}"></label><label>Diámetro o lado (mm)<input name="diametro" inputmode="decimal" value="${m.diametro||''}"></label><label>Ancho (mm)<input name="ancho" id="i-ancho" inputmode="decimal" value="${m.ancho||''}"></label><label>Largo (mm)<input name="largo" id="i-largo" inputmode="decimal" value="${m.largo||''}"></label></div>`:matL;
+    <div class="dos" id="i-med"><label data-m="diametro">Diámetro o lado (mm)<input name="diametro" id="i-diam" inputmode="decimal" value="${m.diametro||''}"></label><label data-m="ancho">Ancho (mm)<input name="ancho" id="i-ancho" inputmode="decimal" value="${m.ancho||''}"></label><label data-m="espesor">Espesor (mm)<input name="espesor" id="i-esp" inputmode="decimal" value="${m.espesor||''}"></label><label data-m="dint">Diámetro interior (mm)<input id="i-dint" inputmode="decimal" autocomplete="off" value="${m.diametro>0&&m.espesor>0?fmtN(m.diametro-2*m.espesor):''}"></label><label data-m="largo">Largo (mm)<input name="largo" id="i-largo" inputmode="decimal" value="${m.largo||''}"></label></div>`:matL;
   S.detalle=null;
   abrir(`<form data-form="item"><input type="hidden" name="id" value="${esc(id||'')}"><input type="hidden" name="area" id="i-area" value="${a}">
     <div class="entre"><h2>${id?'Editar '+esc(it.codigo):'Nuevo ítem de '+AREAS[a].n}</h2><small class="tenue">${id?'':'Código '+sigCodigo(a)}</small></div>
@@ -913,6 +959,7 @@ function formItem(area,id){
       <label>Stock actual<input name="stock" id="i-stock" inputmode="decimal" value="${id?it.stock:0}"></label>
       <label>Stock mínimo<input name="minimo" inputmode="decimal" required value="${it.minimo??''}"></label><label>Stock de pedido<input name="cantPedido" inputmode="decimal" required value="${it.cantPedido??''}"></label></div>
     ${id?'<small class="tenue">Si cambiás el stock, la diferencia queda registrada en el historial como ajuste de inventario.</small>':''}
+    ${AREAS[a].tec?'':`<label>Unidades por pack o caja (opcional)<input name="porPack" inputmode="decimal" value="${it.porPack||''}" placeholder="Vacío si se compra suelto"></label><small class="tenue" style="margin-top:-6px">Ej.: caja de 10 discos. El stock se cuenta en la unidad de arriba (caja, pack) y la app muestra también las unidades sueltas; en las salidas podés descontar por unidad.</small>`}
     <div class="dos"><label>Marca actual<input name="marca" list="dl-m" value="${esc(it.marca||'')}"></label><label>Proveedor habitual<input name="proveedor" list="dl-p" value="${esc(it.proveedor||'')}"></label></div>
     <div class="dos"><label>Costo unitario<input name="costo" id="i-costo" inputmode="decimal" value="${it.costo||''}"></label><label>Moneda<select name="moneda" id="i-moneda">${opciones([{id:'USD',nombre:'Dólares (USD)'},{id:'ARS',nombre:'Pesos ($)'}],it.moneda||'USD')}</select></label></div>
     <label>Marcas sugeridas (separadas por coma)<input name="marcasSug" value="${esc((it.marcasSug||[]).join(', '))}"></label>
@@ -921,6 +968,7 @@ function formItem(area,id){
     ${dl('dl-mat',[...new Set([...(S.cfg.materiales[a]||[]),...S.items.filter(i=>i.area===a).map(i=>i.material).filter(Boolean)])])}${dl('dl-m',listaCfg('marcas','marca'))}${dl('dl-p',listaCfg('proveedores','proveedor'))}
     <div class="err" id="i-err"></div>
     <div class="fila" style="justify-content:flex-end"><button type="button" data-act="cerrar">Cancelar</button><button class="pri">Guardar</button></div></form>`);
+  ponerCamposM();
 }
 function formLote(){
   const a=S.sel.area,n=S.sel.ids.size,lst=(n,l)=>`<datalist id="${n}">${l.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`;
@@ -993,8 +1041,10 @@ const dlProy=()=>`<datalist id="dl-proy">${ordenAZ([...new Set([...(S.reservas||
 function formMov(id,tipo,cant,cierra,ref,rid){
   const it=item(id),ent=tipo==='entrada',vuelve=S.rapido?'r':S.detalle===id?1:'';
   abrir(`<form data-form="mov"><input type="hidden" name="id" value="${id}"><input type="hidden" name="tipo" value="${tipo}"><input type="hidden" name="vuelve" value="${vuelve}"><input type="hidden" name="reservaId" value="${rid||''}">
-    <div><small class="tenue">${esc(it.codigo)} · stock ${fmt(it.stock)} ${esc(it.unidad)}</small><h2 style="color:var(--${ent?'verde':'rojo'})">${ent?'Entrada':'Salida'} · ${esc(it.descripcion)}</h2></div>
-    <label>Cantidad (${esc(it.unidad)})<input name="cantidad" id="mv-c" inputmode="decimal" required autocomplete="off" value="${cant||''}" style="font-size:24px;min-height:56px"></label>
+    <div><small class="tenue">${esc(it.codigo)} · stock ${fmt(it.stock)} ${esc(it.unidad)}${conSub(it)}</small><h2 style="color:var(--${ent?'verde':'rojo'})">${ent?'Entrada':'Salida'} · ${esc(it.descripcion)}</h2></div>
+    ${subF(it)?`<div class="dos" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)"><label>Cantidad<input name="cantidad" id="mv-c" inputmode="decimal" required autocomplete="off" value="${cant||''}" style="font-size:24px;min-height:56px"></label>
+      <label>En<select name="enMm" id="mv-u" style="min-height:56px"><option value="">${esc(it.unidad)}</option><option value="1">${subU(it)}</option></select></label></div><small class="tenue" id="mv-eq" style="margin-top:-6px"></small>`
+    :`<label>Cantidad (${esc(it.unidad)})<input name="cantidad" id="mv-c" inputmode="decimal" required autocomplete="off" value="${cant||''}" style="font-size:24px;min-height:56px"></label>`}
     <label>Motivo<select name="motivo">${opciones(MOTIVOS[tipo],MOTIVOS[tipo][0])}</select></label>
     <label>OV / OC o proyecto (opcional)<input name="ref" list="dl-proy" autocomplete="off" value="${esc(ref||'')}"></label>${dlProy()}
     ${rid?'<small class="tenue">Lo que registres se descuenta de la reserva.</small>':''}
@@ -1002,6 +1052,11 @@ function formMov(id,tipo,cant,cierra,ref,rid){
     <div class="err" id="mv-err"></div>
     <div class="fila" style="justify-content:flex-end"><button type="button" data-act="${vuelve==='r'?'rapido':vuelve?'ver':'cerrar'}" data-v="${tipo}" data-id="${id}">Cancelar</button><button class="pri">Registrar ${ent?'entrada':'salida'}</button></div></form>`);
   $('#mv-c').focus();
+}
+function eqMov(){ // debajo de la cantidad muestra la equivalencia: barras ↔ mm
+  const e=$('#mv-eq'),fm=$('#m1 [data-form=mov]');if(!e||!fm)return;
+  const it=item(fm.querySelector('[name=id]').value),f=subF(it),v=num($('#mv-c').value),enMm=!!$('#mv-u').value;
+  e.textContent=v>0&&f?(enMm?'= '+(Math.round(v/f*1e4)/1e4).toLocaleString('es-AR',{maximumFractionDigits:4})+' '+it.unidad:'= '+fmtSub(it,v*f)):'';
 }
 function formPedido(id){
   const it=item(id);
@@ -1045,11 +1100,14 @@ function vConfig(){
   const std=a=>{const FORMATOS=formatosStd(a),m={};FORMATOS.forEach(f=>{const x=stdDe(a,f);if(x)m[f]=x});return `<form data-form="medidas" class="sec" style="gap:8px"><input type="hidden" name="area" value="${a}"><h3>Medidas estándar (mm)</h3><small class="tenue">Se completan solas al elegir el formato en un ítem nuevo.</small>
     <div class="tres"><span class="tenue">Formato</span><span class="tenue">Ancho</span><span class="tenue">Largo</span>${FORMATOS.map((f,i)=>`<span>${f}</span><input name="an_${i}" id="ms-${a}-an-${i}" inputmode="decimal" aria-label="Ancho de ${f}" value="${(m[f]||{}).ancho||''}"><input name="la_${i}" id="ms-${a}-la-${i}" inputmode="decimal" aria-label="Largo de ${f}" value="${(m[f]||{}).largo||''}">`).join('')}</div>
     <button class="chico pri" style="align-self:flex-start">Guardar medidas</button></form>`};
+  const largos=a=>{const n=S.items.filter(i=>i.area===a&&esBarraF(a,formatoItem(i))&&!(num((i.medidas||{}).largo)>0)).length;
+    return `<div class="sec" style="gap:8px"><h3>Largo de las barras</h3><small class="tenue">El stock de barras, caños, tubos, perfiles, planchuelas y bujes se cuenta por unidad y la app lo muestra también en mm (stock × largo de la barra). Si un ítem no tiene largo se usa el estándar de arriba${LARGO_DEF[a]?' o, si no hay, '+fmtMm(LARGO_DEF[a]):''}.</small>
+      ${n?`<button class="chico" data-act="completarLargos" data-v="${a}" style="align-self:flex-start">Guardar el largo estándar en ${n} ítem${n===1?'':'s'} sin largo</button>`:'<small class="tenue">Todos los ítems tienen su largo cargado.</small>'}</div>`};
   const area=a=>`<details class="bloque" data-k="${a}"${S.abierto[a]?' open':''}><summary><h2>${AREAS[a].n}</h2></summary><div class="sec">
     <div class="sec" style="gap:0"><div class="entre"><h3>Categorías y subcategorías</h3><button class="chico" data-act="catNueva" data-v="${a}">Categoría</button></div>
     ${cats(a).map((c,ci)=>`<div class="cat"><div class="entre"><b>${esc(c.nombre)}</b>${bc(a,ci)}</div>${(c.subs||[]).map((s,si)=>`<div class="entre sub"><span>${esc(s.nombre)}</span>${bc(a,ci,si)}</div>`).join('')}<button class="chico" data-act="subNueva" data-v="${a}" data-c="${ci}" style="align-self:flex-start;margin-left:18px">Subcategoría</button></div>`).join('')}</div>
     <div class="sec" style="gap:8px"><h3>Materiales</h3>${chips('mat:'+a)}</div>
-    ${AREAS[a].tec?std(a):''}</div></details>`;
+    ${AREAS[a].tec?std(a)+largos(a):''}</div></details>`;
   return `<h1>Configuración</h1>${apar}${comp}
   <div class="bloque"><h2>Semáforo</h2><form data-form="semaforo" class="sec"><div class="dos"><label>Amarillo hasta (% sobre el mínimo)<input name="amarilloPct" id="sm-a" inputmode="decimal" value="${S.cfg.amarilloPct}"></label><label>Rojo hasta (% sobre el mínimo)<input name="rojoPct" id="sm-r" inputmode="decimal" value="${S.cfg.rojoPct}"></label></div>
     <small class="tenue">Ejemplo con mínimo 100: rojo hasta ${fmt(100+S.cfg.rojoPct)}, amarillo hasta ${fmt(100+S.cfg.amarilloPct)}, verde por encima.</small><div class="err" id="sm-err"></div><button class="pri" style="align-self:flex-start">Guardar</button></form></div>
@@ -1144,8 +1202,8 @@ async function bajarExcel(tipo){
   let tit=['Pestaña','Código','Descripción','Categoría','Subcategoría','Unidad','Stock actual','Stock mínimo','Stock de pedido','Marca actual','Marcas sugeridas','Proveedor','Ubicación','Material / calidad','Formato','Espesor (mm)','Diámetro o lado (mm)','Ancho (mm)','Largo (mm)','Observaciones'];
   let filas,nombre;
   if(tipo==='plantilla'){tit=['Categoría','Material','Descripción','U. medida','Proveedor','Marca','Marcas sugeridas','Stock mínimo','Stock de pedido','Stock actual','Ubicación','Formato','Espesor (mm)','Diámetro o lado (mm)','Ancho (mm)','Largo (mm)','Costo unitario','Moneda','Observaciones'];filas=[];nombre='StockApp-carga-inicial.xlsx'}
-  else{tit.splice(2,0,'Estado');tit.push('Costo unitario','Moneda','Valor en stock (USD)','Reservado','Reservas');filas=S.items.slice().sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>{const c=catDe(i),s=c&&(c.subs||[]).find(x=>x.id===i.subId),m=i.medidas||{};
-    return [AREAS[i.area].n,i.codigo,ETI[estado(i)],i.descripcion,c?c.nombre:'',s?s.nombre:'',i.unidad,i.stock,i.minimo,i.cantPedido,i.marca||'',(i.marcasSug||[]).join(', '),i.proveedor||'',i.ubicacion||'',i.material||'',i.formato||'',m.espesor||'',m.diametro||'',m.ancho||'',m.largo||'',i.obs||'',i.costo||'',i.costo?i.moneda||'USD':'',i.costo?Math.round(i.stock*usd(i)*100)/100:'',reservado(i)||'',(i.reservas||[]).map(r=>nomR(r)+': '+r.cantidad).join(' | ')]});nombre='StockApp-stock-'+isoHoy()+'.xlsx'}
+  else{tit.splice(2,0,'Estado');tit.push('Costo unitario','Moneda','Valor en stock (USD)','Reservado','Reservas','Stock (mm)','Unidades por pack');filas=S.items.slice().sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>{const c=catDe(i),s=c&&(c.subs||[]).find(x=>x.id===i.subId),m=i.medidas||{};
+    return [AREAS[i.area].n,i.codigo,ETI[estado(i)],i.descripcion,c?c.nombre:'',s?s.nombre:'',i.unidad,i.stock,i.minimo,i.cantPedido,i.marca||'',(i.marcasSug||[]).join(', '),i.proveedor||'',i.ubicacion||'',i.material||'',i.formato||'',m.espesor||'',m.diametro||'',m.ancho||'',m.largo||'',i.obs||'',i.costo||'',i.costo?i.moneda||'USD':'',i.costo?Math.round(i.stock*usd(i)*100)/100:'',reservado(i)||'',(i.reservas||[]).map(r=>nomR(r)+': '+r.cantidad).join(' | '),stockMm(i)??'',packDe(i)||'']});nombre='StockApp-stock-'+isoHoy()+'.xlsx'}
   const wb=X.utils.book_new(),ws=X.utils.aoa_to_sheet([tit,...filas]);ws['!cols']=tit.map(t=>({wch:Math.max(12,t.length+2)}));X.utils.book_append_sheet(wb,ws,tipo==='plantilla'?'Ítems':'Stock');X.writeFile(wb,nombre);
 }
 const guardarCfg=()=>DB.guardarCfg(S.cfg);
@@ -1215,6 +1273,9 @@ document.addEventListener('click',async e=>{
   else if(act==='pedido')formPedido(d.id);
   else if(act==='reservar')formReserva(d.id);
   else if(act==='resEditar')formEditRes(d.v);
+  else if(act==='completarLargos'){const l=S.items.filter(i=>i.area===d.v&&esBarraF(d.v,formatoItem(i))&&!(num((i.medidas||{}).largo)>0));
+    if(!l.length)return;if(!await confirmar('Se guarda el largo estándar en '+l.length+' ítem(s) de '+AREAS[d.v].n+'. Después podés cambiarlo en cada uno. ¿Seguir?','Guardar'))return;
+    l.forEach(i=>DB.patchItem(i.id,{medidas:Object.assign({},i.medidas||{},{largo:largoStd(i.area,formatoItem(i))})}));toast(l.length+' ítem(s) con largo guardado');render()}
   else if(act==='resArchivar'){const r=reservaDe(d.v);if(r){DB.guardarReserva(r.id,{archivado:!r.archivado});toast(r.archivado?'Reserva reactivada':'Reserva archivada')}}
   else if(act==='resBorrar'){const r=reservaDe(d.v);if(!r)return;const nm=matsDeRes(r).length;
     if(nm){toast('No se puede borrar: hay '+nm+' material(es) reservados. Archivala.');return}
@@ -1257,9 +1318,12 @@ document.addEventListener('submit',e=>{
     const min=num(d.minimo),cp=num(d.cantPedido);
     if(min<0||cp<=0){$('#i-err').textContent='El stock mínimo no puede ser negativo y el stock de pedido debe ser mayor que cero.';return}
     const base={descripcion:d.descripcion.trim(),catId:d.catId||'',subId:d.subId||'',unidad:d.unidad,minimo:min,cantPedido:cp,marca:(d.marca||'').trim(),proveedor:(d.proveedor||'').trim(),
-      marcasSug:(d.marcasSug||'').split(',').map(x=>x.trim()).filter(Boolean),ubicacion:(d.ubicacion||'').trim(),obs:(d.obs||'').trim(),plazo:Math.max(0,Math.round(num(d.plazo))),costo:Math.max(0,num(d.costo)),moneda:d.moneda==='ARS'?'ARS':'USD',actualizado:Date.now()};
+      marcasSug:(d.marcasSug||'').split(',').map(x=>x.trim()).filter(Boolean),ubicacion:(d.ubicacion||'').trim(),obs:(d.obs||'').trim(),plazo:Math.max(0,Math.round(num(d.plazo))),porPack:AREAS[d.area].tec?0:(num(d.porPack)>1?num(d.porPack):0),costo:Math.max(0,num(d.costo)),moneda:d.moneda==='ARS'?'ARS':'USD',actualizado:Date.now()};
     base.material=matElegido(d);aprender(d.area,base);
-    if(AREAS[d.area].tec){const sc=(cats(d.area).find(x=>x.id===d.catId)||{subs:[]}).subs.find(x=>x.id===d.subId);base.formato=sc?sc.nombre:'';base.medidas={espesor:num(d.espesor),diametro:num(d.diametro),ancho:num(d.ancho),largo:num(d.largo)}}
+    if(AREAS[d.area].tec){const sc=(cats(d.area).find(x=>x.id===d.catId)||{subs:[]}).subs.find(x=>x.id===d.subId);base.formato=sc?sc.nombre:'';if(esBarraF(d.area,base.formato)&&!(num(d.largo)>0))d.largo=largoStd(d.area,base.formato);
+      const km=camposDe(base.formato);
+      if(km&&km.dint&&num(d.espesor)>0&&num(d.diametro)>0&&2*num(d.espesor)>=num(d.diametro)){$('#i-err').textContent='Revisá las medidas: el espesor de pared es demasiado grande para ese diámetro exterior.';return}
+      if(km)Object.keys(CAMPOS_M).forEach(n=>{if(!km[n])d[n]=''});base.medidas={espesor:num(d.espesor),diametro:num(d.diametro),ancho:num(d.ancho),largo:num(d.largo)}}
     const ns=num(d.stock);if(String(d.stock||'').trim()!==''&&!/^\d+([.,]\d+)?$/.test(String(d.stock).trim())){$('#i-err').textContent='Revisá el stock actual: tiene que ser un número.';return}
     if(d.id){const it0=item(d.id),df=Math.round((ns-it0.stock)*1000)/1000;DB.guardarItem(d.id,base);if(df)DB.mov(item(d.id),df>0?'entrada':'salida',Math.abs(df),'Ajuste de inventario','Edición del ítem',{});cerrar();verItem(d.id);toast(df?'Cambios guardados y stock ajustado':'Cambios guardados')}
     else{const ini=num(d.stock);
@@ -1267,12 +1331,13 @@ document.addEventListener('submit',e=>{
         const id=DB.guardarItem(null,base);if(ini>0)DB.mov(Object.assign({id},base),'entrada',ini,'Stock inicial','',{});cerrar();toast('Ítem '+base.codigo+' creado')})
       .catch(()=>{$('#i-err').textContent='No se pudo asignar el código (¿sin conexión?). Probá de nuevo.'})}
   }else if(tipo==='mov'){
-    const it=item(d.id),c=num(d.cantidad);
+    const it=item(d.id),f=d.enMm?subF(it):0,chico=f?num(d.cantidad):0;let c=f?Math.round(chico/f*1e4)/1e4:num(d.cantidad); // en mm o unidades sueltas: se pasa a barras, m o cajas
+    if(d.tipo==='salida'&&c>it.stock&&c-it.stock<1e-3)c=it.stock; // redondeo: sacar todo lo que queda
     if(c<=0){$('#mv-err').textContent='Ingresá una cantidad mayor que cero.';return}
-    if(d.tipo==='salida'&&c>it.stock){$('#mv-err').textContent='No alcanza el stock: hay '+fmt(it.stock)+' '+it.unidad+'.';return}
+    if(d.tipo==='salida'&&c>it.stock+1e-9){$('#mv-err').textContent='No alcanza el stock: hay '+fmt(it.stock)+' '+it.unidad+conSub(it)+'.';return}
     const pt=d.cierra?{pedidoCurso:null}:{};
     if(d.reservaId){pt.reservas=(it.reservas||[]).map(r=>r.id===d.reservaId?Object.assign({},r,{cantidad:Math.round((r.cantidad-c)*1000)/1000}):r).filter(r=>r.cantidad>0)}
-    DB.mov(it,d.tipo,c,d.motivo,(d.ref||'').trim(),pt);
+    DB.mov(it,d.tipo,c,d.motivo,(d.ref||'').trim(),pt,chico?(subU(it)==='mm'?{mm:chico}:{sueltas:chico}):undefined);
     toast((d.tipo==='entrada'?'Entrada':'Salida')+' registrada');d.vuelve==='r'?modalRapido(d.tipo):d.vuelve?verItem(d.id):cerrar();
   }else if(tipo==='pedido'){
     const c=num(d.cantidad);if(c<=0||!d.fecha){$('#pd-err').textContent='Completá la fecha y una cantidad mayor que cero.';return}
@@ -1329,21 +1394,28 @@ document.addEventListener('change',e=>{if(e.target.id==='ac-otro')render()});
 document.addEventListener('input',e=>{
   const id=e.target.id,f=S.f[S.tab];
   if(id==='rq'){listaRapida();return}
+  if(id==='mv-c'||id==='mv-u'){eqMov();return}
+  if(id==='i-ancho'||id==='i-largo'){e.target.dataset.auto='';return}
+  if(id==='i-diam'||id==='i-esp'||id==='i-dint'){enlazarDiam(id);return} // lo escribió el usuario: no se reemplaza al cambiar de formato
   if(id==='g-q'){S.gq=e.target.value;const r=$('#g-res');if(r)r.innerHTML=resBusqueda();return}
   if(id==='f-q'){f.q=e.target.value;renderLista()}
   else if(e.target.classList.contains('ct')){S.conteo.vals[e.target.dataset.id]=e.target.value;pintaDif(e.target.dataset.id);resumenConteo()}
 });
 document.addEventListener('change',e=>{
   const id=e.target.id,v=e.target.value,f=S.f[S.tab];
+  if(id==='mv-u'){eqMov();return}
   if(id==='f-cat'){f.cat=v;f.sub='';render()}
   else if(id==='f-sub'){f.sub=v;renderLista()} else if(id==='f-marca'){f.marca=v;renderLista()} else if(id==='f-estado'){f.estado=v;renderLista()}
   else if(e.target.classList.contains('matsel')){const o=e.target.parentNode.querySelector('.matotro');o.hidden=v!=='__otro';if(!o.hidden)o.focus()}
   else if(id==='l-area'){$('#l-matw').outerHTML=selMaterial(v,'',1,'l-matw');$('#l-cat').innerHTML=opcLoteCat(v,S.sel.area);$('#l-sub').innerHTML=v===S.sel.area?'<option value="">No cambiar</option>':'<option value="__no">Ninguna</option>'}
   else if(id==='l-cat'){const c=cats($('#l-area').value).find(x=>x.id===v);$('#l-sub').innerHTML=!v?'<option value="">No cambiar</option>':'<option value="__no">Ninguna</option>'+opciones(c?c.subs||[]:[],'')}
-  else if(id==='i-cat'){const c=cats($('#i-area').value).find(x=>x.id===v);$('#i-sub').innerHTML=opciones(c?c.subs||[]:[],'','Ninguna')}
+  else if(id==='i-cat'){const c=cats($('#i-area').value).find(x=>x.id===v);$('#i-sub').innerHTML=opciones(c?c.subs||[]:[],'','Ninguna');ponerCamposM()}
   else if(id==='i-sub'&&$('#i-ancho')){ // medidas estándar según el formato elegido
+    ponerCamposM();
     const c=cats($('#i-area').value).find(x=>x.id===$('#i-cat').value),sc=c&&(c.subs||[]).find(x=>x.id===v),st=sc&&stdDe($('#i-area').value,sc.nombre),an=$('#i-ancho'),la=$('#i-largo');
-    if(st){if(st.ancho&&!an.value)an.value=st.ancho;if(st.largo&&!la.value)la.value=st.largo}
+    // completa el estándar si el campo está vacío o si lo había puesto la app (no pisa lo que escribió el usuario)
+    const pon=(e,x)=>{if(!e.value||e.dataset.auto){e.value=x||'';e.dataset.auto=x?'1':''}};
+    pon(an,st&&st.ancho);pon(la,(st&&st.largo)||(sc&&esBarraF($('#i-area').value,sc.nombre)?largoStd($('#i-area').value,sc.nombre):0));
   }
   else if(e.target.classList.contains('u-ed'))DB.usuario(e.target.dataset.email,{editor:e.target.checked});
   else if(id==='imp-arch'&&e.target.files[0])leerExcel(e.target.files[0]);
@@ -1450,7 +1522,7 @@ function demoDB(){
     guardarItem(id,data){if(id)Object.assign(item(id),data);else{id=uid();S.items.push(Object.assign({id},data))}guardar();alDato();return id},
     patchItem(id,p){Object.assign(item(id),p);guardar();alDato()},
     borrarItem(id){S.items.splice(S.items.findIndex(i=>i.id===id),1);guardar();alDato()},
-    mov(it,tipo,c,motivo,ref,patch,extra){const r=item(it.id);r.stock=Math.round((r.stock+(tipo==='entrada'?c:-c))*1000)/1000;Object.assign(r,patch);
+    mov(it,tipo,c,motivo,ref,patch,extra){const r=item(it.id);r.stock=Math.round((r.stock+(tipo==='entrada'?c:-c))*1e4)/1e4;Object.assign(r,patch);
       S.movs.unshift(Object.assign({id:uid(),itemId:r.id,codigo:r.codigo,descripcion:r.descripcion,area:r.area,unidad:r.unidad,tipo,cantidad:c,motivo,ref,usuario:S.user.nombre,fecha:Date.now(),stockRes:r.stock},extra||{}));guardar();alDato()},
     marcarAnulado(id,p){const m=S.movs.find(x=>x.id===id);if(m)Object.assign(m,p);guardar();alDato()},
     todo(){return Promise.resolve({cfg:S.cfg,items:S.items,movs:S.movs})},
@@ -1508,7 +1580,7 @@ function fireDB(){
     patchItem(id,p){fs.collection('stockapp_items').doc(id).update(p).catch(fallo)},
     borrarItem(id){fs.collection('stockapp_items').doc(id).delete().catch(fallo)},
     mov(it,tipo,c,motivo,ref,patch,extra){const b=fs.batch(),s=tipo==='entrada'?c:-c;
-      b.set(fs.collection('stockapp_movimientos').doc(),Object.assign({itemId:it.id,codigo:it.codigo,descripcion:it.descripcion,area:it.area,unidad:it.unidad,tipo,cantidad:c,motivo,ref,usuario:S.user.nombre,email:S.user.email,fecha:Date.now(),stockRes:Math.round(((it.stock||0)+s)*1000)/1000},extra||{}));
+      b.set(fs.collection('stockapp_movimientos').doc(),Object.assign({itemId:it.id,codigo:it.codigo,descripcion:it.descripcion,area:it.area,unidad:it.unidad,tipo,cantidad:c,motivo,ref,usuario:S.user.nombre,email:S.user.email,fecha:Date.now(),stockRes:Math.round(((it.stock||0)+s)*1e4)/1e4},extra||{}));
       b.set(fs.collection('stockapp_items').doc(it.id),Object.assign({stock:inc(s),actualizado:Date.now()},patch),{merge:true});b.commit().catch(fallo)},
     guardarCfg(c){fs.doc('stockapp_config/general').set(c).catch(fallo)},
     guardarReserva(id,p,nueva){const x=Object.assign({},p,{actualizado:Date.now(),actualizadoPor:S.user.email});
