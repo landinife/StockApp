@@ -212,6 +212,10 @@ button.secc:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(
 .caja .ct span{font:600 12px var(--f-tit);letter-spacing:.08em;text-transform:uppercase;color:var(--tenue)}
 .caja strong{font:600 36px/1.1 var(--f-tit);color:var(--cc)}
 .caja svg{width:20px;height:20px;flex:none;color:var(--cc)}
+/* en la lista de En mínimo / Por agotarse: aviso de que el ítem ya se pidió (cantidad y OC resaltadas) */
+.reng.yaped{box-shadow:inset 3px 0 0 var(--acento);padding-left:10px;background:linear-gradient(90deg,var(--azul-f),transparent 70%)}
+.pedc{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:5px;color:var(--acento);font-size:13px}
+.pedc b{font-weight:700}
 
 /* ---------- Íconos de sección, de movimiento y del logo ---------- */
 .tile{flex:none;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--c);
@@ -390,6 +394,8 @@ details>.sec{margin-top:12px;gap:16px}
   .nav button.sc,.nav button.sc:hover,.nav button.pc,.nav button.pc:hover{display:flex} /* en PC las secciones, Entrada, Salida y Compras sí se ven */
   .nav button.mv,.nav button.mv:hover{display:none} /* Depósitos y Acciones son solo del teléfono */
   .nav button.sc svg{color:var(--c)} /* cada sección con el color de sus tarjetas */
+  .nav button.ne,.nav button.ne:hover{color:var(--verde)} .nav button.ns,.nav button.ns:hover{color:var(--rojo)} /* Entrada verde y Salida roja, como en Inicio */
+  .nav button.ne:hover{background:var(--verde-f)} .nav button.ns:hover{background:var(--rojo-f)}
   .nav .sep{display:block;flex:none;height:1px;margin:6px 8px;background:var(--linea)}
   .nav button.on.fuera{background:none;color:var(--tenue)} /* dentro de una sección, Inicio no queda marcado */
   .nav button.on.fuera:hover{background:var(--boton);color:var(--texto)}
@@ -721,7 +727,7 @@ function vNav(){ // barra de navegación: abajo en el teléfono, al costado en l
   const cfg=S.tab==='config',enSec=!!AREAS[S.tab],n=pendCompras(),
     b=(at,ico,t,on,ex,cl)=>`<button ${at}${on||cl?` class="${[on?'on':'',cl||''].join(' ').trim()}"`:''}${on?' aria-current="page"':''}><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg><span class="tl">${t}</span>${ex||''}</button>`,
     secs=Object.keys(AREAS).map(a=>b(`data-act="tab" data-v="${a}" style="--c:var(--c-${a})"`,ICONOS[a],AREAS[a].n,S.tab===a,'','sc')).join('');
-  return `<nav class="nav" aria-label="Navegación">${b('data-act="tab" data-v="resumen"',IC_NAV.inicio,'Inicio',!cfg,'',enSec?'fuera':'')}${secs}<i class="sep"></i>${b('data-act="sheetDep"',IC_NAV.dep,'Depósitos',enSec,'','mv')}${b('data-act="sheetAcc"',IC_NAV.acc,'Acciones',0,`<b class="cuenta" id="nav-c2"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`,'mv')}${b('data-act="rapido" data-v="entrada"',IC.entrada,'Entrada',0,'','pc')}${b('data-act="rapido" data-v="salida"',IC.salida,'Salida',0,'','pc')}${b('data-act="compras"',IC.compras,'Compras',0,`<b class="cuenta" id="nav-c"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`,'pc')}${b('data-act="tab" data-v="config"',ICONOS.config,'Configuración',cfg).replace('<span class="tl">Configuración</span>','<span class="tl larga">Configuración</span><span class="tl corta">Config.</span>')}</nav>`;
+  return `<nav class="nav" aria-label="Navegación">${b('data-act="tab" data-v="resumen"',IC_NAV.inicio,'Inicio',!cfg,'',enSec?'fuera':'')}${secs}<i class="sep"></i>${b('data-act="sheetDep"',IC_NAV.dep,'Depósitos',enSec,'','mv')}${b('data-act="sheetAcc"',IC_NAV.acc,'Acciones',0,`<b class="cuenta" id="nav-c2"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`,'mv')}${b('data-act="rapido" data-v="entrada"',IC.entrada,'Entrada',0,'','pc ne')}${b('data-act="rapido" data-v="salida"',IC.salida,'Salida',0,'','pc ns')}${b('data-act="compras"',IC.compras,'Compras',0,`<b class="cuenta" id="nav-c"${n?'':' hidden'} aria-label="${n} para pedir">${n}</b>`,'pc')}${b('data-act="tab" data-v="config"',ICONOS.config,'Configuración',cfg).replace('<span class="tl">Configuración</span>','<span class="tl larga">Configuración</span><span class="tl corta">Config.</span>')}</nav>`;
 }
 function pintaNavCuenta(){const n=pendCompras();['nav-c','nav-c2'].forEach(k=>{const e=document.getElementById(k);if(e){e.textContent=n;e.hidden=!n}})} // actualiza el contador de Compras (y el de Acciones) sin redibujar
 function hojaDepositos(){ // hoja del teléfono: los 5 depósitos, cada uno con su ícono y su color
@@ -774,13 +780,16 @@ async function anularMov(id){
   if($('#h-lista')&&S.hPar)verHistorial(...S.hPar);else if(S.hist.id&&$('#it-movs'))pintaHist();
 }
 function compras(){return S.items.filter(i=>estado(i)==='rojo').sort((a,b)=>(a.proveedor||'~').localeCompare(b.proveedor||'~','es')||a.codigo.localeCompare(b.codigo))}
+function avisoPed(i){ // chip "Pedido en curso" con la cantidad pedida y la OC resaltadas
+  const p=i.pedidoCurso;return `<div class="pedc"><span class="pil ped">Pedido en curso</span><span><b>${fmt(p.cantidad)} ${esc(i.unidad)}</b>${p.oc?' · <b>'+esc(p.oc)+'</b>':''} · ${dia(p.fecha)}</span></div>`;
+}
 function vResumen(){
   const c={rojo:0,amarillo:0,verde:0};S.items.forEach(i=>c[estado(i)]++);
   const ped=S.items.filter(i=>i.pedidoCurso).length,lc=compras();
   const pend=lc.filter(i=>!i.pedidoCurso).length; // ítems en mínimo que falta pedir
   const L={rojo:S.items.filter(i=>estado(i)==='rojo'),amarillo:S.items.filter(i=>estado(i)==='amarillo'),ped:S.items.filter(i=>i.pedidoCurso)};
   const caja=(k,cl,t)=>`<button class="caja ${cl}" data-act="caja" data-v="${k}" aria-pressed="${S.caja===k}"><span class="ct"><span>${t}</span>${ic(k)}</span><strong>${L[k].length}</strong></button>`;
-  const det=S.caja?(L[S.caja].length?`<div class="lista">${L[S.caja].sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>`<div class="reng" data-act="ver" data-id="${i.id}" style="cursor:pointer;gap:12px">${tile(i.area,'ch')}<div>${esc(i.descripcion)}<br><small>${esc(i.codigo)} · ${AREAS[i.area].n}${i.proveedor?' · '+esc(i.proveedor):''}${S.caja==='ped'?'<br>'+esc(quienPed(i.pedidoCurso)):''}</small></div><div class="der">${S.caja==='ped'?`${fmt(i.pedidoCurso.cantidad)} ${esc(i.unidad)}<br><small>pedido ${dia(i.pedidoCurso.fecha)}</small>`:`${fmt(i.stock)} ${esc(i.unidad)}<br><small>mín. ${fmt(i.minimo)}</small>`}</div></div>`).join('')}</div>`:`<div class="vacio">No hay ítems en este grupo.</div>`):'';
+  const det=S.caja?(L[S.caja].length?`<div class="lista">${L[S.caja].sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>`<div class="reng${S.caja!=='ped'&&i.pedidoCurso?' yaped':''}" data-act="ver" data-id="${i.id}" style="cursor:pointer;gap:12px">${tile(i.area,'ch')}<div>${esc(i.descripcion)}<br><small>${esc(i.codigo)} · ${AREAS[i.area].n}${i.proveedor?' · '+esc(i.proveedor):''}${S.caja==='ped'?'<br>'+esc(quienPed(i.pedidoCurso)):''}</small>${S.caja!=='ped'&&i.pedidoCurso?avisoPed(i):''}</div><div class="der">${S.caja==='ped'?`${fmt(i.pedidoCurso.cantidad)} ${esc(i.unidad)}<br><small>pedido ${dia(i.pedidoCurso.fecha)}</small>`:`${fmt(i.stock)} ${esc(i.unidad)}<br><small>mín. ${fmt(i.minimo)}</small>`}</div></div>`).join('')}</div>`:`<div class="vacio">No hay ítems en este grupo.</div>`):'';
   let valor='';
   if(S.editor&&S.items.some(i=>i.costo>0)){
     const pa={};let t=0,sin=0,ars=0;S.items.forEach(i=>{const x=i.stock*usd(i);pa[i.area]=(pa[i.area]||0)+x;t+=x;if(!(i.costo>0))sin++;else if(i.moneda==='ARS')ars++});
@@ -902,9 +911,9 @@ function renderLista(){
   if(!l.length){el.innerHTML=`<div class="vacio">${S.items.some(i=>i.area===a)?'Ningún ítem coincide con los filtros.':'Todavía no hay ítems en '+AREAS[a].n+'.'+(S.editor?' Usá "+ Nuevo ítem" o importá un Excel desde Configuración.':'')}</div>`;return}
   if(S.conteo&&S.conteo.area===a){ // relevamiento: ordenado por ubicación para recorrer el depósito
     const v=S.conteo.vals;l.sort((x,y)=>(x.ubicacion||'~').localeCompare(y.ubicacion||'~','es',{numeric:true})||x.codigo.localeCompare(y.codigo));
-    el.innerHTML=`<div class="sec">`+l.map(i=>`<div class="tarj cont"><div><span class="t">${esc(i.descripcion)}</span><br><small class="tenue">${esc(i.codigo)}${i.ubicacion?' · '+esc(i.ubicacion):''}${medidas(i)?' · '+esc(medidas(i)):''}</small></div>
+    el.innerHTML=`<div class="sec">`+conGrupos(l,cabTarj,i=>`<div class="tarj cont"><div><span class="t">${esc(i.descripcion)}</span><br><small class="tenue">${esc(i.codigo)}${i.ubicacion?' · '+esc(i.ubicacion):''}${medidas(i)?' · '+esc(medidas(i)):''}</small></div>
       <div class="entre"><span>Sistema <b id="sis-${i.id}">${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?`<br><small class="tenue" id="smm-${i.id}">${conSub(i).slice(3)}</small>`:''}</span><span class="fila" style="flex-wrap:nowrap;gap:6px"><input class="ct" id="ct-${i.id}" data-id="${i.id}" inputmode="decimal" enterkeyhint="next" autocomplete="off" placeholder="Contado" aria-label="Cantidad contada de ${esc(i.descripcion)}" value="${esc(v[i.id]??'')}"><button class="sig" data-act="calc" data-id="${i.id}" aria-label="Calculadora para ${esc(i.descripcion)}" title="Calculadora"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15v2.5M8.5 18h.01M12 18h.01"/></svg></button></span></div>
-      <div class="dif" id="df-${i.id}" aria-live="polite"></div></div>`).join('')+
+      <div class="dif" id="df-${i.id}" aria-live="polite"></div></div>`)+
       `<div class="barra"><span id="ct-res"></span><span class="fila"><button class="pri" data-act="conteoGuardar">Terminar</button></span></div></div>`;
     l.forEach(i=>pintaDif(i.id));resumenConteo();return;
   }
