@@ -1,5 +1,5 @@
 rules_version = '2';
-// Reglas de Firestore completas — proyecto tpfapps-5f226 (19/11/2026: Unificar desde Excel en StockApp)
+// Reglas de Firestore completas — proyecto tpfapps-5f226 (20/11/2026: ComprasApp guarda el origen y el historial del costo)
 // Incluye: ViajesApp, StockApp, ComprasApp, ProducciónApp y ProyectosApp.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -62,9 +62,9 @@ service cloud.firestore {
       // Sin permiso de edición solo se puede mover stock y marcar pedidos.
       allow update: if stockEditor() || (stockOk() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'reservas']))
-        // ComprasApp: ingreso por recepción, pedido en curso, costo y reserva de lo recibido
+        // ComprasApp: ingreso por recepción, pedido en curso, reserva de lo recibido y costo (con su origen e historial)
         || (comprasOk() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'costo', 'moneda', 'reservas']));
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'actualizado', 'pedidoCurso', 'costo', 'moneda', 'costoInfo', 'costoHist', 'reservas']));
     }
     match /stockapp_movimientos/{doc} {
       allow read, create: if stockOk();

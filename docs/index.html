@@ -349,6 +349,9 @@ details>.sec{margin-top:12px;gap:16px}
 .sw{display:inline-flex;align-items:center;gap:8px}
 .sw i{width:18px;height:18px;border-radius:50%;background:var(--sw);box-shadow:0 0 10px color-mix(in srgb,var(--sw) 55%,transparent);flex:none}
 .sw[aria-pressed=true]{border-color:var(--sw);box-shadow:0 0 0 1px var(--sw),0 4px 16px color-mix(in srgb,var(--sw) 25%,transparent);background:color-mix(in srgb,var(--sw) 16%,transparent)}
+/* costos anteriores en la ficha */
+.hcost summary{justify-content:flex-start;gap:6px;margin-top:4px;color:var(--tenue)}
+.hcost summary::after{font-size:16px}
 /* compartir la app */
 .enlace{display:block;padding:8px 10px;border-radius:var(--rb);background:var(--campo);border:1px solid var(--linea);font-size:13px;overflow-wrap:anywhere;color:var(--texto)}
 #qr-caja:not(:empty){display:flex;flex-direction:column;align-items:flex-start;gap:6px}
@@ -500,7 +503,7 @@ function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeou
 function cfgDefecto(){
   const c=(n,subs)=>({id:uid(),nombre:n,subs:subs.map(s=>({id:uid(),nombre:s}))});
   return {amarilloPct:20,rojoPct:10,
-    dolar:0,plazoDef:15,seguridadPct:50,coberturaMeses:2,unidades:['un','Kg','m','Par','Pack','Litros'],marcas:[],
+    dolar:0,costoAvisoPct:25,densidades:{},plazoDef:15,seguridadPct:50,coberturaMeses:2,unidades:['un','Kg','m','Par','Pack','Litros'],marcas:[],
     proyectos:['Cintas de empaque pollo entero','Clasificador de pollo B','Clasificadora de pollo entero','Garantías','Puente aéreo','Repuestos','Sistema de transporte'],
     proveedores:['Abul','Aumecon','Carisio SRL','Chavetas gala','Deels','Extruplast','Famiq','Ferrenet','Ferrolatina','GAMA','Grafica 24/7','HyH','Ifm','Lexmetales','Mercado libre','Polipack','Radio Lux','Roller Service','Rosario Neumática','Schneider Fresas','Sellados FGC','SEW','Shell','Sidinox','Sinpar','SMC','TEC','Todo Rulemanes','Ugarte','Uranga','VesArg','Vinter','Xoren'],
     materiales:{panol:[],aceros:['AISI 304','AISI 420','AISI 630'],noferrosos:['Aluminio 6061','Bronce SAE 40'],
@@ -515,7 +518,7 @@ function cfgDefecto(){
       componentes:['Bandas','Electrónica / Electricidad','Motores / Reductores y variadores','Neumática','Rodamientos'].map(n=>c(n,[]))}};
 }
 function normCfg(c){ // completa lo que falte y ordena alfabéticamente
-  const d0=cfgDefecto();c=Object.assign(cfgDefecto(),c);c.categorias=c.categorias||{};c.materiales=c.materiales||{};c.medidasStd=c.medidasStd||{};
+  const d0=cfgDefecto();c=Object.assign(cfgDefecto(),c);c.categorias=c.categorias||{};c.materiales=c.materiales||{};c.medidasStd=c.medidasStd||{};c.densidades=c.densidades||{};if(!(c.costoAvisoPct>0))c.costoAvisoPct=25;
   const tx=(x,y)=>x.localeCompare(y,'es',{sensitivity:'base',numeric:true}),ab=(x,y)=>tx(x.nombre,y.nombre);
   for(const a in AREAS){const l=c.categorias[a]=c.categorias[a]||[];l.forEach(k=>(k.subs=k.subs||[]).sort(ab));l.sort(ab);
     c.materiales[a]=(c.materiales[a]||d0.materiales[a]||[]).sort(tx);c.medidasStd[a]=c.medidasStd[a]||{}}
@@ -533,6 +536,25 @@ const cats=a=>(S.cfg&&S.cfg.categorias&&S.cfg.categorias[a])||[];
 const catDe=it=>cats(it.area).find(c=>c.id===it.catId);
 function rutaCat(it){const c=catDe(it);if(!c)return 'Sin categoría';const s=(c.subs||[]).find(x=>x.id===it.subId);return c.nombre+(s?' › '+s.nombre:'')}
 const usd=it=>{const c=it.costo||0;if(!c)return 0;return it.moneda==='ARS'?(S.cfg.dolar>0?c/S.cfg.dolar:0):c};
+/* ---------- Costo: USD sin IVA por unidad de stock. Lo actualiza ComprasApp al emitir una OC, o quien edita el ítem ----------
+   costoInfo = {fecha, origen ('ComprasApp' o 'StockApp'), usuario, email, oc, proveedor, precio, unidadOC, factor}
+     factor = unidades de la OC que entran en 1 unidad de stock (ej.: OC en Kg y stock en barras → kg por barra); costo = precio × factor
+   costoHist = costos anteriores, el más nuevo primero (hasta 40): {costo, moneda, fecha, origen, usuario, oc, proveedor} */
+function cambioCosto(it,costo,moneda,info){ // arma el cambio de costo: el costo actual pasa al historial
+  const ci=it.costoInfo||{},h=(it.costoHist||[]).slice();
+  if(it.costo>0)h.unshift({costo:it.costo,moneda:it.moneda||'USD',fecha:ci.fecha||it.actualizado||Date.now(),origen:ci.origen||'',usuario:ci.usuario||'',oc:ci.oc||'',proveedor:ci.proveedor||''});
+  return {costo,moneda,costoInfo:Object.assign({fecha:Date.now()},quienAhora(),info),costoHist:h.slice(0,40)};
+}
+const monCosto=(mo,c)=>(mo==='ARS'?'$ ':'USD ')+fmt(c);
+const usdDe=(c,mo)=>mo==='ARS'?(S.cfg.dolar>0?c/S.cfg.dolar:0):c;
+function filaCosto(it){ // ficha: costo actual, de dónde salió y los costos anteriores (solo quien edita)
+  if(!S.editor||!(it.costo>0))return '';
+  const ci=it.costoInfo||{},h=it.costoHist||[],org=x=>[x.oc,x.proveedor,x.fecha?dia(x.fecha):'',x.origen==='StockApp'?'a mano'+(x.usuario?' ('+x.usuario+')':''):x.origen==='ComprasApp'&&!x.oc?'ComprasApp':''].filter(Boolean).join(' · ');
+  const var_=(a,b)=>{a=usdDe(a.costo,a.moneda||'USD');b=usdDe(b.costo,b.moneda||'USD');if(!a||!b)return '';const p=Math.round((a-b)/b*100);return p?` <small style="color:var(--${Math.abs(p)>=(S.cfg.costoAvisoPct||25)?'amar':'tenue'})">${p>0?'+':''}${p} %</small>`:''};
+  return `<dt>Costo unitario</dt><dd>${monCosto(it.moneda,it.costo)} por ${esc(it.unidad)} <small class="tenue">sin IVA</small>${h.length?var_(it,h[0]):''}${org(ci)?`<br><small class="tenue">${esc(org(ci))}</small>`:''}${ci.unidadOC&&ci.factor&&ci.factor!==1?`<br><small class="tenue">En la OC: ${monCosto('USD',ci.precio||0)} por ${esc(ci.unidadOC)} × ${fmt(ci.factor)} ${esc(ci.unidadOC)} por ${esc(it.unidad)}</small>`:''}
+    ${h.length?`<details class="hcost"><summary><small>Costos anteriores (${h.length})</small></summary><div class="lista">${h.map((x,k)=>`<div class="reng"><div><small>${esc(org(x)||'Sin dato')}</small></div><div class="der">${monCosto(x.moneda,x.costo)}${h[k+1]?var_(x,h[k+1]):''}</div></div>`).join('')}</div></details>`:''}</dd>
+    <dt>Valor en stock</dt><dd>${fUSD(it.stock*usd(it))}</dd>`;
+}
 const fUSD=n=>'USD '+(n<100?Math.round(n*100)/100:Math.round(n)).toLocaleString('es-AR');
 const mesDe=ms=>{const d=new Date(ms);return d.getFullYear()*12+d.getMonth()};
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -586,6 +608,32 @@ function ponerCamposM(){ // muestra en la ficha solo las medidas del formato ele
   const c=cats($('#i-area').value).find(x=>x.id===$('#i-cat').value),sc=c&&(c.subs||[]).find(x=>x.id===sub.value),k=sc?camposDe(sc.nombre):null;
   Object.keys(CAMPOS_M).forEach(n=>{const l=w.querySelector(`[data-m=${n}]`);if(!l)return;l.hidden=k?!k[n]:n==='dint';l.style.order=k&&k[n]?Object.keys(k).indexOf(n):'';l.firstChild.textContent=((k&&k[n])||CAMPOS_M[n])+' (mm)'});
 }
+/* ---------- Peso: kg por unidad de stock (para pasar compras en Kg a barras, metros o chapas) ----------
+   kg/m = sección (mm²) × densidad (g/cm³) ÷ 1000. La densidad sale de Configuración (por material) o de esta tabla.
+   Se guarda en el ítem (kgUn; kgUnAuto = true si es calculado) para que ComprasApp lo pueda leer. */
+const DENS_DEF=[[/inox|aisi\s*-?\s*3\d\d/,7.93],[/aisi\s*-?\s*(4\d\d|630)|17-?4/,7.75],[/acero|sae\s*10\d\d|f-?24|carbono/,7.85],[/alumin/,2.7],[/bronce/,8.8],[/laton/,8.5],[/cobre/,8.94],[/acetal|delrin|\bpom\b/,1.41],[/uhmw|pead|polietileno/,0.94],[/\bpp\b|polipropileno/,0.91],[/grilon|nylon|poliamida/,1.14]];
+function densDef(t){t=sinAc(t);const x=DENS_DEF.find(([r])=>r.test(t));return x?x[1]:0}
+function densidadDe(it){ // g/cm³: la cargada en Configuración para el material; si no, la de la tabla por material o categoría
+  const m=it.material||'',c=S.cfg.densidades||{},k=Object.keys(c).find(x=>sinAc(x)===sinAc(m));if(k&&num(c[k])>0)return num(c[k]);
+  return densDef(m)||densDef((catDe(it)||{}).nombre||'')||(it.area==='aceros'?7.85:0);
+}
+function seccion(it){ // mm² de la sección de barras, caños, perfiles y planchuelas; 0 si faltan medidas
+  const m=it.medidas||{},f=sinAc(formatoItem(it)),D=num(m.diametro),e=num(m.espesor),a=num(m.ancho);
+  if(/^barra cuadrada|^cuadrad/.test(f))return D*D;
+  if(/^barra|^redond|^macizo/.test(f))return Math.PI*D*D/4;
+  if(/^(cano|tubo|buje)/.test(f))return D>0&&e>0&&2*e<D?Math.PI*(D*D-(D-2*e)**2)/4:0;
+  if(/^planchuela/.test(f))return a*e;
+  if(/^(perfil|angulo)/.test(f))return a>0&&e>0?e*(2*a-e):0; // ángulo de alas iguales
+  return 0;
+}
+function kgUnCalc(it){ // kg que pesa 1 unidad de stock; 0 si faltan datos
+  if(!it||!(AREAS[it.area]&&AREAS[it.area].tec))return 0;
+  const u=sinAc(it.unidad||'un'),dn=densidadDe(it),m=it.medidas||{},r=x=>Math.round(x*1000)/1000;
+  if(/^(kg|kilo|kilos)$/.test(u))return 1;if(!dn)return 0;
+  if(/^(chapa|hoja|placa)/.test(sinAc(formatoItem(it))))return /^(un|u|unidad|unidades|hoja|hojas|chapa|chapas|placa|placas)$/.test(u)?r(num(m.espesor)*num(m.ancho)*num(m.largo)*dn/1e6):0;
+  const kgM=seccion(it)*dn/1000,mm=mmPor(it);return kgM&&mm?r(kgM*mm/1000):0;
+}
+const kgUnDe=it=>num(it.kgUn)||kgUnCalc(it);
 const fmtMm=n=>Math.round(n).toLocaleString('es-AR')+' mm';
 const stockMm=it=>{const f=mmPor(it);return f?Math.round(it.stock*f):null}; // lo que puede leer ProducciónApp
 /* Packs (Pañol y Componentes): el stock va en la unidad de compra (caja, pack) y la app muestra las unidades sueltas */
@@ -918,7 +966,7 @@ function verItem(id){
     <div class="sec" style="gap:0"><div class="entre"><h3>Reservas</h3><button class="chico res" data-act="reservar" data-id="${id}">Reservar</button></div>
       ${(it.reservas||[]).length?`<div class="lista">${it.reservas.map(r=>`<div class="reng" style="align-items:center"><div>${esc(nomR(r))}${cliR(r)?` <small class="tenue">· ${esc(cliR(r))}</small>`:''}<br><small>${r.oc?esc(r.oc)+' · ':''}${fmt(r.cantidad)} ${esc(it.unidad)} · ${dia(r.fecha)}${r.usuario?' · '+esc(r.usuario):''}</small></div><span class="fila" style="justify-content:flex-end"><button class="chico pri" data-act="usarRes" data-id="${id}" data-v="${r.id}">Usar</button><button class="chico" data-act="editRes" data-id="${id}" data-v="${r.id}">Editar</button><button class="chico pel" data-act="quitarRes" data-id="${id}" data-v="${r.id}">Quitar</button></span></div>`).join('')}</div>
       <small class="tenue" style="margin-top:6px">Reservado ${fmt(reservado(it))} ${esc(it.unidad)} · disponible ${fmt(disponible(it))} ${esc(it.unidad)}</small>`:'<small class="tenue">Nada reservado. Reservá cantidad para un proyecto o repuesto y deja de contar como disponible. Lo que no está reservado es stock de libre uso.</small>'}</div>
-    <dl class="datos">${fila('Categoría',rutaCat(it))}${fila('Stock mínimo',fmt(it.minimo)+' '+it.unidad)}${fila('Stock de pedido',fmt(it.cantPedido)+' '+it.unidad)}${fila('Material y medidas',medidas(it))}${packDe(it)?fila('Viene en',esc(it.unidad)+' de '+fmt(packDe(it))+' un'):''}${mmPor(it)&&!/^(m|mt|mts|metro|metros)$/.test(sinAc(it.unidad))?fila('Largo de barra',fmtMm(largoBarra(it))+(num((it.medidas||{}).largo)?'':' (estándar)')):''}${fila('Marca actual',it.marca)}${fila('Marcas sugeridas',(it.marcasSug||[]).join(', '))}${fila('Proveedor',it.proveedor)}${S.editor&&it.costo>0?fila('Costo unitario',(it.moneda==='ARS'?'$ ':'USD ')+fmt(it.costo)+' por '+it.unidad)+fila('Valor en stock',fUSD(it.stock*usd(it))):''}${fila('Ubicación',it.ubicacion)}${fila('Observaciones',it.obs)}</dl></div>
+    <dl class="datos">${fila('Categoría',rutaCat(it))}${fila('Stock mínimo',fmt(it.minimo)+' '+it.unidad)}${fila('Stock de pedido',fmt(it.cantPedido)+' '+it.unidad)}${fila('Material y medidas',medidas(it))}${packDe(it)?fila('Viene en',esc(it.unidad)+' de '+fmt(packDe(it))+' un'):''}${mmPor(it)&&!/^(m|mt|mts|metro|metros)$/.test(sinAc(it.unidad))?fila('Largo de barra',fmtMm(largoBarra(it))+(num((it.medidas||{}).largo)?'':' (estándar)')):''}${fila('Marca actual',it.marca)}${fila('Marcas sugeridas',(it.marcasSug||[]).join(', '))}${fila('Proveedor',it.proveedor)}${AREAS[it.area].tec&&kgUnDe(it)&&!/^(kg|kilo|kilos)$/.test(sinAc(it.unidad))?fila('Peso',fmt(kgUnDe(it))+' kg por '+it.unidad+(num(it.kgUn)&&!it.kgUnAuto?'':' (calculado)')):''}${filaCosto(it)}${fila('Ubicación',it.ubicacion)}${fila('Observaciones',it.obs)}</dl></div>
     <div class="sec" style="gap:8px" ${pan('consumo')}><div class="entre"><h3>Consumo mensual</h3><span class="fila" style="flex-wrap:nowrap"><button class="chico" data-act="hMes" data-v="-1" aria-label="Meses anteriores">‹</button><small id="it-rango" class="tenue" style="min-width:104px;text-align:center"></small><button class="chico" data-act="hMes" data-v="1" aria-label="Meses siguientes">›</button></span></div>
       <div id="it-graf"><small class="tenue">Cargando…</small></div></div>
     <div class="sec" style="gap:0" ${pan('movs')}><div class="entre"><h3>Movimientos</h3><button class="chico" data-act="historial" data-id="${id}">Filtrar por fechas</button></div><div id="it-movs" class="lista"></div></div>
@@ -974,7 +1022,9 @@ function formItem(area,id){
     ${id?'<small class="tenue">Si cambiás el stock, la diferencia queda registrada en el historial como ajuste de inventario.</small>':''}
     ${AREAS[a].tec?'':`<label>Unidades por pack o caja (opcional)<input name="porPack" inputmode="decimal" value="${it.porPack||''}" placeholder="Vacío si se compra suelto"></label><small class="tenue" style="margin-top:-6px">Ej.: caja de 10 discos. El stock se cuenta en la unidad de arriba (caja, pack) y la app muestra también las unidades sueltas; en las salidas podés descontar por unidad.</small>`}
     <div class="dos"><label>Marca actual<input name="marca" list="dl-m" value="${esc(it.marca||'')}"></label><label>Proveedor habitual<input name="proveedor" list="dl-p" value="${esc(it.proveedor||'')}"></label></div>
-    <div class="dos"><label>Costo unitario<input name="costo" id="i-costo" inputmode="decimal" value="${it.costo||''}"></label><label>Moneda<select name="moneda" id="i-moneda">${opciones([{id:'USD',nombre:'Dólares (USD)'},{id:'ARS',nombre:'Pesos ($)'}],it.moneda||'USD')}</select></label></div>
+    ${AREAS[a].tec?`<label>Peso por unidad (kg)<input name="kgUn" id="i-kg" inputmode="decimal" autocomplete="off" value="${num(it.kgUn)&&!it.kgUnAuto?it.kgUn:''}" placeholder="${kgUnCalc(it)?'Calculado: '+fmt(kgUnCalc(it))+' kg':'Se calcula con la densidad y las medidas'}"></label><small class="tenue" style="margin-top:-6px">Vacío = lo calcula la app con la densidad del material (Configuración) y las medidas. ComprasApp lo usa para pasar compras en Kg.</small>`:''}
+    <div class="dos"><label>Costo unitario sin IVA<input name="costo" id="i-costo" inputmode="decimal" value="${it.costo||''}"></label><label>Moneda<select name="moneda" id="i-moneda">${opciones([{id:'USD',nombre:'Dólares (USD)'},{id:'ARS',nombre:'Pesos ($)'}],it.moneda||'USD')}</select></label></div>
+    ${id&&it.costoInfo&&it.costoInfo.origen==='ComprasApp'?`<small class="tenue" style="margin-top:-6px">Costo actualizado por ComprasApp${it.costoInfo.oc?' ('+esc(it.costoInfo.oc)+')':''}. Si lo cambiás acá, queda en el historial y la próxima OC lo vuelve a actualizar.</small>`:''}
     <label>Marcas sugeridas (separadas por coma)<input name="marcasSug" value="${esc((it.marcasSug||[]).join(', '))}"></label>
     <div class="dos"><label>Ubicación en planta<input name="ubicacion" value="${esc(it.ubicacion||'')}" placeholder="Estante B2"></label><label>Plazo de entrega (días)<input name="plazo" id="i-plazo" inputmode="numeric" value="${it.plazo||''}" placeholder="${S.cfg.plazoDef||15} por defecto"></label></div>
     <label>Observaciones<textarea name="obs" rows="2">${esc(it.obs||'')}</textarea></label>
@@ -1116,16 +1166,23 @@ function vConfig(){
   const largos=a=>{const n=S.items.filter(i=>i.area===a&&esBarraF(a,formatoItem(i))&&!(num((i.medidas||{}).largo)>0)).length;
     return `<div class="sec" style="gap:8px"><h3>Largo de las barras</h3><small class="tenue">El stock de barras, caños, tubos, perfiles, planchuelas y bujes se cuenta por unidad y la app lo muestra también en mm (stock × largo de la barra). Si un ítem no tiene largo se usa el estándar de arriba${LARGO_DEF[a]?' o, si no hay, '+fmtMm(LARGO_DEF[a]):''}.</small>
       ${n?`<button class="chico" data-act="completarLargos" data-v="${a}" style="align-self:flex-start">Guardar el largo estándar en ${n} ítem${n===1?'':'s'} sin largo</button>`:'<small class="tenue">Todos los ítems tienen su largo cargado.</small>'}</div>`};
+  const dens=a=>{const ms=S.cfg.materiales[a]||[],n=S.items.filter(i=>i.area===a&&!(num(i.kgUn)&&!i.kgUnAuto)&&kgUnCalc(i)!==num(i.kgUn)).length;
+    return `<form data-form="densidades" class="sec" style="gap:8px"><input type="hidden" name="area" value="${a}"><h3>Densidad de los materiales (g/cm³)</h3><small class="tenue">Con la densidad y las medidas la app calcula cuánto pesa cada barra, metro o chapa. Vacío = valor de referencia (el gris).</small>
+      ${ms.length?`<div class="mapa">${ms.map((m,i)=>`<span>${esc(m)}</span><input name="d_${i}" inputmode="decimal" aria-label="Densidad de ${esc(m)}" value="${(S.cfg.densidades||{})[m]||''}" placeholder="${densDef(m)?fmt(densDef(m)):'Sin dato'}">`).join('')}</div><button class="chico pri" style="align-self:flex-start">Guardar densidades</button>`:'<small class="tenue">Primero cargá los materiales.</small>'}
+      ${n?`<button type="button" class="chico" data-act="calcPesos" data-v="${a}" style="align-self:flex-start">Calcular el peso en ${n} ítem${n===1?'':'s'}</button>`:''}</form>`};
   const area=a=>`<details class="bloque" data-k="${a}"${S.abierto[a]?' open':''}><summary><h2>${AREAS[a].n}</h2></summary><div class="sec">
     <div class="sec" style="gap:0"><div class="entre"><h3>Categorías y subcategorías</h3><button class="chico" data-act="catNueva" data-v="${a}">Categoría</button></div>
     ${cats(a).map((c,ci)=>`<div class="cat"><div class="entre"><b>${esc(c.nombre)}</b>${bc(a,ci)}</div>${(c.subs||[]).map((s,si)=>`<div class="entre sub"><span>${esc(s.nombre)}</span>${bc(a,ci,si)}</div>`).join('')}<button class="chico" data-act="subNueva" data-v="${a}" data-c="${ci}" style="align-self:flex-start;margin-left:18px">Subcategoría</button></div>`).join('')}</div>
     <div class="sec" style="gap:8px"><h3>Materiales</h3>${chips('mat:'+a)}</div>
-    ${AREAS[a].tec?std(a)+largos(a):''}</div></details>`;
+    ${AREAS[a].tec?std(a)+largos(a)+dens(a):''}</div></details>`;
   return `<h1>Configuración</h1>${apar}${comp}
   <div class="bloque"><h2>Semáforo</h2><form data-form="semaforo" class="sec"><div class="dos"><label>Amarillo hasta (% sobre el mínimo)<input name="amarilloPct" id="sm-a" inputmode="decimal" value="${S.cfg.amarilloPct}"></label><label>Rojo hasta (% sobre el mínimo)<input name="rojoPct" id="sm-r" inputmode="decimal" value="${S.cfg.rojoPct}"></label></div>
     <small class="tenue">Ejemplo con mínimo 100: rojo hasta ${fmt(100+S.cfg.rojoPct)}, amarillo hasta ${fmt(100+S.cfg.amarilloPct)}, verde por encima.</small><div class="err" id="sm-err"></div><button class="pri" style="align-self:flex-start">Guardar</button></form></div>
   <div class="bloque"><h2>Valor del dólar</h2><form data-form="dolar" class="sec"><label>Pesos por cada dólar ($ / USD)<input name="dolar" id="cf-dolar" inputmode="decimal" value="${S.cfg.dolar||''}" placeholder="Sin cargar"></label>
     <small class="tenue">Se usa para pasar a dólares los ítems con costo en pesos y para mostrar el stock valorizado también en pesos.</small><div class="err" id="dl-err"></div><button class="pri" style="align-self:flex-start">Guardar</button></form></div>
+  <div class="bloque"><h2>Costos</h2><form data-form="costos" class="sec"><small class="tenue">Los costos van en dólares y sin IVA, por unidad de stock. ComprasApp los actualiza al emitir cada OC y el anterior queda en el historial del ítem.</small>
+    <label>Preguntar antes de actualizar si el precio cambia más de (%)<input name="costoAvisoPct" id="cf-aviso" inputmode="decimal" value="${S.cfg.costoAvisoPct||25}"></label>
+    <small class="tenue">Sirve para no tomar como costo una compra de urgencia o un precio fuera de lo normal.</small><div class="err" id="cs-err"></div><button class="pri" style="align-self:flex-start">Guardar</button></form></div>
   ${Object.keys(AREAS).map(area).join('')}
   <div class="bloque"><h2>Unidades de medida</h2>${chips('unidades')}</div>
   <div class="bloque"><h2>Marcas</h2>${chips('marcas')}</div>
@@ -1301,8 +1358,8 @@ async function bajarExcel(tipo){
   let tit=['Pestaña','Código','Descripción','Categoría','Subcategoría','Unidad','Stock actual','Stock mínimo','Stock de pedido','Marca actual','Marcas sugeridas','Proveedor','Ubicación','Material / calidad','Formato','Espesor (mm)','Diámetro o lado (mm)','Ancho (mm)','Largo (mm)','Observaciones'];
   let filas,nombre;
   if(tipo==='plantilla'){tit=['Categoría','Material','Descripción','U. medida','Proveedor','Marca','Marcas sugeridas','Stock mínimo','Stock de pedido','Stock actual','Ubicación','Formato','Espesor (mm)','Diámetro o lado (mm)','Ancho (mm)','Largo (mm)','Costo unitario','Moneda','Observaciones'];filas=[];nombre='StockApp-carga-inicial.xlsx'}
-  else{tit.splice(2,0,'Estado');tit.push('Costo unitario','Moneda','Valor en stock (USD)','Reservado','Reservas','Stock (mm)','Unidades por pack');filas=S.items.slice().sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>{const c=catDe(i),s=c&&(c.subs||[]).find(x=>x.id===i.subId),m=i.medidas||{};
-    return [AREAS[i.area].n,i.codigo,ETI[estado(i)],i.descripcion,c?c.nombre:'',s?s.nombre:'',i.unidad,i.stock,i.minimo,i.cantPedido,i.marca||'',(i.marcasSug||[]).join(', '),i.proveedor||'',i.ubicacion||'',i.material||'',i.formato||'',m.espesor||'',m.diametro||'',m.ancho||'',m.largo||'',i.obs||'',i.costo||'',i.costo?i.moneda||'USD':'',i.costo?Math.round(i.stock*usd(i)*100)/100:'',reservado(i)||'',(i.reservas||[]).map(r=>nomR(r)+': '+r.cantidad).join(' | '),stockMm(i)??'',packDe(i)||'']});nombre='StockApp-stock-'+isoHoy()+'.xlsx'}
+  else{tit.splice(2,0,'Estado');tit.push('Costo unitario','Moneda','Valor en stock (USD)','Reservado','Reservas','Stock (mm)','Unidades por pack','Costo: de dónde salió','Peso por unidad (kg)');filas=S.items.slice().sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>{const c=catDe(i),s=c&&(c.subs||[]).find(x=>x.id===i.subId),m=i.medidas||{};
+    return [AREAS[i.area].n,i.codigo,ETI[estado(i)],i.descripcion,c?c.nombre:'',s?s.nombre:'',i.unidad,i.stock,i.minimo,i.cantPedido,i.marca||'',(i.marcasSug||[]).join(', '),i.proveedor||'',i.ubicacion||'',i.material||'',i.formato||'',m.espesor||'',m.diametro||'',m.ancho||'',m.largo||'',i.obs||'',i.costo||'',i.costo?i.moneda||'USD':'',i.costo?Math.round(i.stock*usd(i)*100)/100:'',reservado(i)||'',(i.reservas||[]).map(r=>nomR(r)+': '+r.cantidad).join(' | '),stockMm(i)??'',packDe(i)||'',i.costoInfo?[i.costoInfo.oc,i.costoInfo.proveedor,i.costoInfo.fecha?dia(i.costoInfo.fecha):'',i.costoInfo.origen].filter(Boolean).join(' · '):'',kgUnDe(i)||'']});nombre='StockApp-stock-'+isoHoy()+'.xlsx'}
   const wb=X.utils.book_new(),ws=X.utils.aoa_to_sheet([tit,...filas]);ws['!cols']=tit.map(t=>({wch:Math.max(12,t.length+2)}));X.utils.book_append_sheet(wb,ws,tipo==='plantilla'?'Ítems':'Stock');X.writeFile(wb,nombre);
 }
 const guardarCfg=()=>DB.guardarCfg(S.cfg);
@@ -1375,6 +1432,8 @@ document.addEventListener('click',async e=>{
   else if(act==='completarLargos'){const l=S.items.filter(i=>i.area===d.v&&esBarraF(d.v,formatoItem(i))&&!(num((i.medidas||{}).largo)>0));
     if(!l.length)return;if(!await confirmar('Se guarda el largo estándar en '+l.length+' ítem(s) de '+AREAS[d.v].n+'. Después podés cambiarlo en cada uno. ¿Seguir?','Guardar'))return;
     l.forEach(i=>DB.patchItem(i.id,{medidas:Object.assign({},i.medidas||{},{largo:largoStd(i.area,formatoItem(i))})}));toast(l.length+' ítem(s) con largo guardado');render()}
+  else if(act==='calcPesos'){const l=S.items.filter(i=>i.area===d.v&&!(num(i.kgUn)&&!i.kgUnAuto)&&kgUnCalc(i)!==num(i.kgUn));if(!l.length)return;
+    l.forEach(i=>DB.patchItem(i.id,{kgUn:kgUnCalc(i),kgUnAuto:true}));toast(l.length+' ítem(s) con peso calculado');render()}
   else if(act==='resArchivar'){const r=reservaDe(d.v);if(r){DB.guardarReserva(r.id,{archivado:!r.archivado});toast(r.archivado?'Reserva reactivada':'Reserva archivada')}}
   else if(act==='resBorrar'){const r=reservaDe(d.v);if(!r)return;const nm=matsDeRes(r).length;
     if(nm){toast('No se puede borrar: hay '+nm+' material(es) reservados. Archivala.');return}
@@ -1423,6 +1482,8 @@ document.addEventListener('submit',e=>{
       const km=camposDe(base.formato);
       if(km&&km.dint&&num(d.espesor)>0&&num(d.diametro)>0&&2*num(d.espesor)>=num(d.diametro)){$('#i-err').textContent='Revisá las medidas: el espesor de pared es demasiado grande para ese diámetro exterior.';return}
       if(km)Object.keys(CAMPOS_M).forEach(n=>{if(!km[n])d[n]=''});base.medidas={espesor:num(d.espesor),diametro:num(d.diametro),ancho:num(d.ancho),largo:num(d.largo)}}
+    if(AREAS[d.area].tec){const k=num(d.kgUn),c0=kgUnCalc(Object.assign({area:d.area},base));base.kgUn=k>0?k:c0;base.kgUnAuto=!(k>0)}
+    {const i0=d.id&&item(d.id);if(i0?(Math.abs((i0.costo||0)-base.costo)>1e-9||(i0.moneda||'USD')!==base.moneda):base.costo>0)Object.assign(base,cambioCosto(i0||{},base.costo,base.moneda,{origen:'StockApp'}))} // el costo anterior pasa al historial
     const ns=num(d.stock);if(String(d.stock||'').trim()!==''&&!/^\d+([.,]\d+)?$/.test(String(d.stock).trim())){$('#i-err').textContent='Revisá el stock actual: tiene que ser un número.';return}
     if(d.id){const it0=item(d.id),df=Math.round((ns-it0.stock)*1000)/1000;DB.guardarItem(d.id,base);if(df)DB.mov(item(d.id),df>0?'entrada':'salida',Math.abs(df),'Ajuste de inventario','Edición del ítem',{});cerrar();verItem(d.id);toast(df?'Cambios guardados y stock ajustado':'Cambios guardados')}
     else{const ini=num(d.stock);
@@ -1476,6 +1537,14 @@ document.addEventListener('submit',e=>{
   else if(tipo==='dolar'){
     const v=num(d.dolar);if(v<=0){$('#dl-err').textContent='Ingresá un valor mayor que cero.';return}
     S.cfg.dolar=v;guardarCfg();render();toast('Valor del dólar actualizado');
+  }
+  else if(tipo==='costos'){
+    const v=num(d.costoAvisoPct);if(v<=0){$('#cs-err').textContent='Ingresá un porcentaje mayor que cero.';return}
+    S.cfg.costoAvisoPct=v;guardarCfg();toast('Aviso de costos guardado');
+  }
+  else if(tipo==='densidades'){
+    const ms=S.cfg.materiales[d.area]||[];ms.forEach((m,i)=>{const v=num(d['d_'+i]);if(v>0)S.cfg.densidades[m]=v;else delete S.cfg.densidades[m]});
+    guardarCfg();render();toast('Densidades guardadas');
   }
   else if(tipo==='sugCfg'){
     const pl=Math.round(num(d.plazoDef)),sg=num(d.seguridadPct),cb=num(d.coberturaMeses);
@@ -1621,7 +1690,7 @@ addEventListener('pagehide',guardaPendientes);
 
 /* ---------- Datos: modo de prueba (sin Firebase) ---------- */
 function demoDB(){
-  const K='stockapp-demo-8';let D;
+  const K='stockapp-demo-9';let D;
   const guardar=()=>{try{localStorage.setItem(K,JSON.stringify(D))}catch(_){}};
   function ejemplo(){
     S.cfg=normCfg({});S.items=[];S.movs=[];
@@ -1642,7 +1711,9 @@ function demoDB(){
     mv(a,'salida',4,'Consumo de producción','OV 1024',2);mv(c,'entrada',4,'Compra','OC 311',26);mv(b,'salida',1,'Consumo de producción','Proyecto ejemplo',50);
     S.cfg.dolar=1000; // valor de ejemplo
     const cs={'PA-0001':[1.2,'USD'],'PA-0002':[9,'USD'],'PA-0003':[2500,'ARS'],'PA-0004':[0.15,'USD'],'AC-0001':[310,'USD'],'AC-0002':[95,'USD'],'NF-0001':[60,'USD'],'PL-0001':[180,'USD'],'CO-0001':[420,'USD']};
-    S.items.forEach(it=>{const x=cs[it.codigo];if(x){it.costo=x[0];it.moneda=x[1]}});
+    S.items.forEach(it=>{const x=cs[it.codigo];if(x){it.costo=x[0];it.moneda=x[1]}if(AREAS[it.area].tec){it.kgUn=kgUnCalc(it);it.kgUnAuto=true}});
+    Object.assign(b,{costoInfo:{fecha:ahora-24*h,origen:'ComprasApp',usuario:'Federico',oc:'OC 2611-004',proveedor:'Sidinox',precio:4.3437,unidadOC:'Kg',factor:71.37},
+      costoHist:[{costo:265,moneda:'USD',fecha:ahora-60*24*h,origen:'ComprasApp',usuario:'Federico',oc:'OC 2609-012',proveedor:'Sidinox'},{costo:250,moneda:'USD',fecha:ahora-150*24*h,origen:'StockApp',usuario:'Ejemplo'}]});
     let sd=7;const rnd=()=>(sd=(sd*9301+49297)%233280)/233280,hoy=new Date();
     S.items.forEach(it=>{for(let k=0;k<10;k++){const n=1+Math.floor(rnd()*3);for(let j=0;j<n;j++){if(rnd()<.3)continue;
       const dmax=k?27:Math.max(1,hoy.getDate()-1),f=new Date(hoy.getFullYear(),hoy.getMonth()-k,1+Math.floor(rnd()*dmax),8+Math.floor(rnd()*9)).getTime();
