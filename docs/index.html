@@ -871,7 +871,7 @@ function renderLista(){
       <small class="tenue">${esc(i.codigo)} · ${esc(rutaCat(i))}${i.ubicacion?' · '+esc(i.ubicacion):''}${medidas(i)?'<br>'+esc(medidas(i)):''}</small>
       <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?` <small class="tenue">${conSub(i).slice(3)}</small>`:''} <small class="tenue">· mín. ${fmt(i.minimo)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`)+`</div>`;
   }
-  if(sm){const n=S.sel.ids.size;el.insertAdjacentHTML('beforeend',`<div class="barra" style="margin-top:12px"><span><b>${n}</b> seleccionado${n===1?'':'s'}</span><span class="fila"><button class="chico" data-act="selVis">Todos los visibles</button><button class="chico" data-act="selNada">Ninguno</button><button class="chico pri" data-act="selEditar">Editar</button><button class="chico pel" data-act="selBorrar">Eliminar</button></span></div>`)}
+  if(sm){const n=S.sel.ids.size,oc=[...S.sel.ids].filter(id=>!S.sel.vis.includes(id)).length;el.insertAdjacentHTML('beforeend',`<div class="barra" style="margin-top:12px"><span><b>${n}</b> seleccionado${n===1?'':'s'}${oc?` <small style="color:var(--amar)">· ${oc} fuera del filtro</small>`:''}</span><span class="fila"><button class="chico" data-act="selVis">Todos los visibles</button><button class="chico" data-act="selNada">Ninguno</button><button class="chico pri" data-act="selEditar">Editar</button><button class="chico pel" data-act="selBorrar">Eliminar</button></span></div>`)}
   if(fid)enfocar(filaDe(fid));
 }
 
@@ -1010,7 +1010,7 @@ async function aplicarLote(d){
   let cods=[];if(mueve){try{cods=await DB.sigCodigos(dest,its.length)}catch(e){$('#l-err').textContent='No se pudieron asignar los códigos (¿sin conexión?). Probá de nuevo.';return}}
   its.forEach((it,k)=>{const q=Object.assign({actualizado:Date.now()},p);if(mueve){q.area=dest;q.codigo=cods[k]}DB.guardarItem(it.id,q)});
   aprender(dest,p);const n=its.length;
-  if(mueve)S.sel.ids.clear();cerrar();renderLista();toast(n+' ítem'+(n===1?'':'s')+' actualizado'+(n===1?'':'s')+(mueve?' y movido'+(n===1?'':'s')+' a '+AREAS[dest].n:''));
+  S.sel.ids.clear();cerrar();renderLista();toast(n+' ítem'+(n===1?'':'s')+' actualizado'+(n===1?'':'s')+(mueve?' y movido'+(n===1?'':'s')+' a '+AREAS[dest].n:''));
 }
 function formReserva(id,rid,nuevaId){
   const it=item(id),r=(it.reservas||[]).find(x=>x.id===rid),max=disponible(it)+(r?r.cantidad:0);
