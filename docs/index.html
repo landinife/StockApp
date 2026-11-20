@@ -1486,10 +1486,12 @@ document.addEventListener('submit',e=>{
     {const i0=d.id&&item(d.id);if(i0?(Math.abs((i0.costo||0)-base.costo)>1e-9||(i0.moneda||'USD')!==base.moneda):base.costo>0)Object.assign(base,cambioCosto(i0||{},base.costo,base.moneda,{origen:'StockApp'}))} // el costo anterior pasa al historial
     const ns=num(d.stock);if(String(d.stock||'').trim()!==''&&!/^\d+([.,]\d+)?$/.test(String(d.stock).trim())){$('#i-err').textContent='Revisá el stock actual: tiene que ser un número.';return}
     if(d.id){const it0=item(d.id),df=Math.round((ns-it0.stock)*1000)/1000;DB.guardarItem(d.id,base);if(df)DB.mov(item(d.id),df>0?'entrada':'salida',Math.abs(df),'Ajuste de inventario','Edición del ítem',{});cerrar();verItem(d.id);toast(df?'Cambios guardados y stock ajustado':'Cambios guardados')}
-    else{const ini=num(d.stock);
+    else{const ini=num(d.stock),bt=f.querySelector('button.pri');
+      if(f.dataset.enviando)return; // ya se está creando: un segundo toque en Guardar no crea otro ítem
+      f.dataset.enviando='1';if(bt){bt.disabled=true;bt.textContent='Guardando…'}
       DB.sigCodigos(d.area,1).then(([cod])=>{Object.assign(base,{area:d.area,codigo:cod,stock:0,pedidoCurso:null,creado:Date.now()});
         const id=DB.guardarItem(null,base);if(ini>0)DB.mov(Object.assign({id},base),'entrada',ini,'Stock inicial','',{});cerrar();toast('Ítem '+base.codigo+' creado')})
-      .catch(()=>{$('#i-err').textContent='No se pudo asignar el código (¿sin conexión?). Probá de nuevo.'})}
+      .catch(()=>{delete f.dataset.enviando;if(bt){bt.disabled=false;bt.textContent='Guardar'}$('#i-err').textContent='No se pudo asignar el código (¿sin conexión?). Probá de nuevo.'})}
   }else if(tipo==='mov'){
     const it=item(d.id),f=d.enMm?subF(it):0,chico=f?num(d.cantidad):0;let c=f?Math.round(chico/f*1e4)/1e4:num(d.cantidad); // en mm o unidades sueltas: se pasa a barras, m o cajas
     if(d.tipo==='salida'&&c>it.stock&&c-it.stock<1e-3)c=it.stock; // redondeo: sacar todo lo que queda
@@ -1529,7 +1531,10 @@ document.addEventListener('submit',e=>{
     if(tipo==='resNueva'){cerrar('#m2');formReserva(d.id,d.rid||undefined,nid);const c=$('#rs-cant');if(c&&d.cant)c.value=d.cant;toast('Reserva "'+nombre+'" creada')}
     else{toast('Reserva agregada');render()}
   }
-  else if(tipo==='lote')aplicarLote(d);
+  else if(tipo==='lote'){ // doble toque en Aplicar: se ignora hasta que termine el primero
+    if(f.dataset.enviando)return;f.dataset.enviando='1';const bt=f.querySelector('button.pri');if(bt)bt.disabled=true;
+    aplicarLote(d).finally(()=>{delete f.dataset.enviando;if(bt)bt.disabled=false});
+  }
   else if(tipo==='medidas'){
     const o={};formatosStd(d.area).forEach((f,i)=>{const an=num(d['an_'+i]),la=num(d['la_'+i]);if(an>0||la>0){o[f]={};if(an>0)o[f].ancho=an;if(la>0)o[f].largo=la}});
     S.cfg.medidasStd[d.area]=o;guardarCfg();toast('Medidas estándar guardadas');
