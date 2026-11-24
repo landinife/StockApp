@@ -184,7 +184,6 @@ button.opc.act{box-shadow:inset 0 0 0 2px var(--acento)}
 .rapidos button{min-height:58px;font:700 19px var(--f-tit);letter-spacing:.05em;text-transform:uppercase;border-top-width:3px;border-radius:var(--r);box-shadow:var(--sh);background:var(--panel)}
 .rapidos button.ent,.rapidos button.ent:hover{border-top-color:var(--verde);background:linear-gradient(180deg,color-mix(in srgb,var(--verde) 12%,transparent),var(--panel) 75%)}
 .rapidos button.sal,.rapidos button.sal:hover{border-top-color:var(--rojo);background:linear-gradient(180deg,color-mix(in srgb,var(--rojo) 12%,transparent),var(--panel) 75%)}
-.rapidos button.comp,.rapidos button.comp:hover{grid-column:1/-1;color:var(--acento);border-color:color-mix(in srgb,var(--acento) 50%,transparent);border-top-color:var(--acento);background:linear-gradient(180deg,color-mix(in srgb,var(--acento) 12%,transparent),var(--panel) 75%)}
 .rapidos .cuenta{margin-left:8px;vertical-align:2px;letter-spacing:0}
 .rapidos svg{width:24px;height:24px;vertical-align:-5px;margin-right:8px}
 
@@ -410,7 +409,6 @@ details>.sec{margin-top:12px;gap:16px}
   .filtros .fsel,.filtros:not(.abierto) .fsel{flex:4;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))} /* en PC los filtros siempre a la vista */
   .velo{align-items:center} .hoja{border-radius:var(--rf)}
   button.fab{display:none}
-  .rapidos{grid-template-columns:repeat(3,minmax(0,1fr))} .rapidos button.comp{grid-column:auto} /* en PC los tres botones en una fila */
 }
 @media (min-width:1050px){.secciones{grid-template-columns:repeat(5,minmax(0,1fr))}}
 </style>
@@ -786,7 +784,6 @@ function avisoPed(i){ // chip "Pedido en curso" con la cantidad pedida y la OC r
 function vResumen(){
   const c={rojo:0,amarillo:0,verde:0};S.items.forEach(i=>c[estado(i)]++);
   const ped=S.items.filter(i=>i.pedidoCurso).length,lc=compras();
-  const pend=lc.filter(i=>!i.pedidoCurso).length; // ítems en mínimo que falta pedir
   const L={rojo:S.items.filter(i=>estado(i)==='rojo'),amarillo:S.items.filter(i=>estado(i)==='amarillo'),ped:S.items.filter(i=>i.pedidoCurso)};
   const caja=(k,cl,t)=>`<button class="caja ${cl}" data-act="caja" data-v="${k}" aria-pressed="${S.caja===k}"><span class="ct"><span>${t}</span>${ic(k)}</span><strong>${L[k].length}</strong></button>`;
   const det=S.caja?(L[S.caja].length?`<div class="lista">${L[S.caja].sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(i=>`<div class="reng${S.caja!=='ped'&&i.pedidoCurso?' yaped':''}" data-act="ver" data-id="${i.id}" style="cursor:pointer;gap:12px">${tile(i.area,'ch')}<div>${esc(i.descripcion)}<br><small>${esc(i.codigo)} · ${AREAS[i.area].n}${i.proveedor?' · '+esc(i.proveedor):''}${S.caja==='ped'?'<br>'+esc(quienPed(i.pedidoCurso)):''}</small>${S.caja!=='ped'&&i.pedidoCurso?avisoPed(i):''}</div><div class="der">${S.caja==='ped'?`${fmt(i.pedidoCurso.cantidad)} ${esc(i.unidad)}<br><small>pedido ${dia(i.pedidoCurso.fecha)}</small>`:`${fmt(i.stock)} ${esc(i.unidad)}<br><small>mín. ${fmt(i.minimo)}</small>`}</div></div>`).join('')}</div>`:`<div class="vacio">No hay ítems en este grupo.</div>`):'';
@@ -802,7 +799,7 @@ function vResumen(){
   return `<div class="cajas">${caja('rojo','r','En mínimo')}${caja('amarillo','a','Por agotarse')}${caja('ped','p','Pedido en curso')}</div>
   ${det}
   <div class="sec"><input id="g-q" type="search" placeholder="Buscar en todo el stock" value="${esc(S.gq)}" autocomplete="off" aria-label="Buscar en todo el stock"><div id="g-res">${resBusqueda()}</div></div>
-  <div class="rapidos"><button class="ent" data-act="rapido" data-v="entrada">${ic('entrada')}Entrada</button><button class="sal" data-act="rapido" data-v="salida">${ic('salida')}Salida</button><button class="comp" data-act="compras">${ic('compras')}Lista de compras${pend?` <b class="cuenta">${pend}</b>`:''}</button></div>
+  <div class="rapidos"><button class="ent" data-act="rapido" data-v="entrada">${ic('entrada')}Entrada</button><button class="sal" data-act="rapido" data-v="salida">${ic('salida')}Salida</button></div>
   <div class="sec solo-pc"><h2>Secciones</h2><div class="secciones">${secc}</div></div>
   ${valor}
   <div class="sec"><div class="entre"><h2>Últimos movimientos</h2><button class="chico" data-act="historial">Ver historial</button></div>
