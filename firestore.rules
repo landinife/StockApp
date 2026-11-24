@@ -1,5 +1,5 @@
 rules_version = '2';
-// Reglas de Firestore completas — proyecto tpfapps-5f226 (20/11/2026: ComprasApp guarda el origen y el historial del costo)
+// Reglas de Firestore completas — proyecto tpfapps-5f226 (24/11/2026: ProducciónApp lee los ítems de StockApp, campo kgm)
 // Incluye: ViajesApp, StockApp, ComprasApp, ProducciónApp y ProyectosApp.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -132,6 +132,11 @@ service cloud.firestore {
       allow create: if prodMiembro() && request.resource.data.email == prodEmail();
       allow update: if prodMiembro() && resource.data.email == prodEmail() && request.resource.data.email == prodEmail();
       allow delete: if prodAdmin();
+    }
+
+    // ProducciónApp lee los ítems de StockApp (kg/m, costo, stock). Solo lectura: no cambia quién escribe
+    match /stockapp_items/{doc} {
+      allow read: if prodMiembro();
     }
 
     // ---------- Reservas compartidas (StockApp, ComprasApp y ProducciónApp) ----------

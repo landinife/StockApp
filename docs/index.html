@@ -452,6 +452,7 @@ function conGrupos(l,cab,fila){ // arma la lista agrupada: cab dibuja el título
   return agrupar(l).map(g=>{const sub=g.subs.length>1||g.subs[0].sub!=='',n=g.subs.reduce((a,s)=>a+s.items.length,0);
     return cab(g.cat,n,false)+g.subs.map(s=>(sub?cab(s.sub||'Sin subcategoría',s.items.length,true):'')+s.items.map(fila).join('')).join('')}).join('');
 }
+const medKgm=i=>[medidas(i),num(i.kgm)>0?fmt2(i.kgm)+' kg/m':''].filter(Boolean).join(' · '); // medidas + kg/m para la lista de cada sección
 const cabTarj=(n,c,sub)=>`<div class="grp${sub?' sub':''}">${esc(n)} <small>${c}</small></div>`; // título de grupo en el teléfono
 const cabFila=(n,c,sub)=>`<tr class="grp${sub?' sub':''}"><td colspan="9">${esc(n)} <small>${c}</small></td></tr>`; // título de grupo en la tabla de la PC
 function selMaterial(a,val,lote,id){ // lista de materiales de la pestaña, con opción de escribir uno nuevo
@@ -507,7 +508,7 @@ function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeou
 function cfgDefecto(){
   const c=(n,subs)=>({id:uid(),nombre:n,subs:subs.map(s=>({id:uid(),nombre:s}))});
   return {amarilloPct:20,rojoPct:10,
-    dolar:0,costoAvisoPct:25,densidades:{},plazoDef:15,seguridadPct:50,coberturaMeses:2,unidades:['un','Kg','m','Par','Pack','Litros'],marcas:[],
+    dolar:0,costoAvisoPct:25,densidades:{},densKgm:DENS_KGM.map(x=>Object.assign({},x)),plazoDef:15,seguridadPct:50,coberturaMeses:2,unidades:['un','Kg','m','Par','Pack','Litros'],marcas:[],
     proyectos:['Cintas de empaque pollo entero','Clasificador de pollo B','Clasificadora de pollo entero','Garantías','Puente aéreo','Repuestos','Sistema de transporte'],
     proveedores:['Abul','Aumecon','Carisio SRL','Chavetas gala','Deels','Extruplast','Famiq','Ferrenet','Ferrolatina','GAMA','Grafica 24/7','HyH','Ifm','Lexmetales','Mercado libre','Polipack','Radio Lux','Roller Service','Rosario Neumática','Schneider Fresas','Sellados FGC','SEW','Shell','Sidinox','Sinpar','SMC','TEC','Todo Rulemanes','Ugarte','Uranga','VesArg','Vinter','Xoren'],
     materiales:{panol:[],aceros:['AISI 304','AISI 420','AISI 630'],noferrosos:['Aluminio 6061','Bronce SAE 40'],
@@ -522,7 +523,7 @@ function cfgDefecto(){
       componentes:['Bandas','Electrónica / Electricidad','Motores / Reductores y variadores','Neumática','Rodamientos'].map(n=>c(n,[]))}};
 }
 function normCfg(c){ // completa lo que falte y ordena alfabéticamente
-  const d0=cfgDefecto();c=Object.assign(cfgDefecto(),c);c.categorias=c.categorias||{};c.materiales=c.materiales||{};c.medidasStd=c.medidasStd||{};c.densidades=c.densidades||{};if(!(c.costoAvisoPct>0))c.costoAvisoPct=25;
+  const d0=cfgDefecto();c=Object.assign(cfgDefecto(),c);c.categorias=c.categorias||{};c.materiales=c.materiales||{};c.medidasStd=c.medidasStd||{};c.densidades=c.densidades||{};if(!Array.isArray(c.densKgm)||!c.densKgm.length)c.densKgm=DENS_KGM.map(x=>Object.assign({},x));if(!(c.costoAvisoPct>0))c.costoAvisoPct=25;
   const tx=(x,y)=>x.localeCompare(y,'es',{sensitivity:'base',numeric:true}),ab=(x,y)=>tx(x.nombre,y.nombre);
   for(const a in AREAS){const l=c.categorias[a]=c.categorias[a]||[];l.forEach(k=>(k.subs=k.subs||[]).sort(ab));l.sort(ab);
     c.materiales[a]=(c.materiales[a]||d0.materiales[a]||[]).sort(tx);c.medidasStd[a]=c.medidasStd[a]||{}}
@@ -638,6 +639,87 @@ function kgUnCalc(it){ // kg que pesa 1 unidad de stock; 0 si faltan datos
   const kgM=seccion(it)*dn/1000,mm=mmPor(it);return kgM&&mm?r(kgM*mm/1000):0;
 }
 const kgUnDe=it=>num(it.kgUn)||kgUnCalc(it);
+/* ---------- Peso por metro (kgm): lo lee ProducciónApp para calcular el peso y el costo de material de cada pieza ----------
+   Campo kgm del ítem: número en kg/m, con dos decimales. NO cambiar el nombre: ProducciónApp lo lee así. Vacío (null) = sin dato.
+   Solo barras, tubos y perfiles (lo que se mide en metros); chapas, placas, ítems en Kg y Pañol/Componentes lo dejan vacío.
+   kg/m = área de la sección (mm²) × densidad (g/cm³) ÷ 1000. Tubos y ángulos sin radios (±3 %): si se carga el valor de catálogo a mano, manda ese. */
+const DENS_KGM=[ // densidades de referencia (g/cm³); se editan en Configuración → Peso por metro. r = palabras que las reconocen
+  {n:'AISI 316',d:8.00,r:'\\b316'},{n:'AISI 304',d:7.93,r:'\\b304'},{n:'Acero al carbono',d:7.85,r:'carbono|sae\\s*-?\\s*10\\d\\d|\\b10[1-9]\\d\\b|f\\s*-?\\s*24|hierro|\\bst\\s*37|acero(?!\\s*inox)'},
+  {n:'Aluminio',d:2.70,r:'alumin'},{n:'Resina (Delrin)',d:1.41,r:'delrin|acetal|\\bpom\\b|resina'},{n:'Nylon',d:1.14,r:'nylon|grilon|poliamida'},
+  {n:'Teflón',d:2.20,r:'teflon|ptfe'},{n:'Bronce',d:8.8,r:'bronce'},{n:'Latón',d:8.5,r:'laton'}];
+const FORMAS_KGM={red:'Macizo redondo',cua:'Macizo cuadrado',hex:'Hexagonal',pla:'Planchuela',tred:'Tubo redondo',tcua:'Tubo cuadrado',trec:'Tubo rectangular',angI:'Ángulo de alas iguales',angD:'Ángulo de alas desiguales'};
+const fmt2=n=>(Math.round(n*100)/100).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esKgU=u=>/^(kg|kgs|kilo|kilos)$/.test(sinAc(u||''));
+function aplicaKgm(it){ // ¿lleva kg/m? solo lo lineal de Aceros, No ferrosos y Plásticos que no se cuenta en Kg
+  return !!(AREAS[it.area]&&AREAS[it.area].tec)&&esBarraF(it.area,formatoItem(it))&&!/\b(chapa|placa|hoja)\b/.test(sinAc(it.descripcion))&&!esKgU(it.unidad);
+}
+function densKgmDe(it){ // densidad según el material (descripción + material + categoría). null si no se reconoce
+  const t=sinAc([it.descripcion,it.material,(catDe(it)||{}).nombre].join(' ')),l=(S.cfg.densKgm||[]).filter(x=>num(x.d)>0);
+  const x=l.filter(x=>!x.r).find(x=>t.includes(sinAc(x.n)))||l.filter(x=>x.r).find(x=>new RegExp(x.r).test(t)); // primero los agregados a mano
+  return x?{n:x.n,d:num(x.d)}:null;
+}
+function leerMedidasTxt(desc){ // saca de la descripción los números de las medidas (en mm; las pulgadas se pasan a mm)
+  let t=' '+sinAc(desc).replace(/[øØ⌀]/g,' ø ')+' ';
+  const n=s=>parseFloat(String(s).replace(',','.')),P='(?:"|\'\'|”|pulg\\w*|plg)';
+  t=t.replace(/\b(aisi|sae|din|iso|astm)\s*-?\s*\d+[a-z]*/g,' ').replace(/\b(30[1-9]|31[0-9]|4[0-4]\d|630|17-4|6061|6063|6082|7075|2024|1010|1020|1045|4140|4340|8620)l?\b/g,' ')
+    .replace(/\bf\s*-?\s*24\b|\bm\d+\b|\bpa\s*6\b|\bst\s*37\b/g,' ')
+    .replace(/\d+(?:[.,]\d+)?\s*(?:m|mts?|metros?)\b/g,' '); // largos en metros (6 m, 3 mts)
+  t=t.replace(new RegExp('(\\d+)\\s+(\\d+)\\s*/\\s*(\\d+)\\s*'+P+'?','g'),(_,a,b,c)=>' '+(n(a)+n(b)/n(c))*25.4+' ') // 1 1/2"
+    .replace(new RegExp('(\\d+)\\s*/\\s*(\\d+)\\s*'+P+'?','g'),(_,b,c)=>' '+n(b)/n(c)*25.4+' ') // 3/16"
+    .replace(new RegExp('(\\d+(?:[.,]\\d+)?)\\s*'+P,'g'),(_,a)=>' '+n(a)*25.4+' '); // 2"
+  const N='(\\d+(?:[.,]\\d+)?)',L={},tomar=(k,re)=>{t=t.replace(re,(_,v)=>{if(L[k]==null)L[k]=n(v);return ' '})};
+  tomar('di',new RegExp('\\b(?:d\\.?\\s*int\\w*|dint|diam\\w*\\s*int\\w*|int\\w*)\\s*[:=]?\\s*ø?\\s*'+N,'g'));
+  tomar('D',new RegExp('\\b(?:d\\.?\\s*ext\\w*|dext|diam\\w*\\s*ext\\w*|ext\\w*)\\s*[:=]?\\s*ø?\\s*'+N,'g'));
+  tomar('D',new RegExp('ø\\s*'+N,'g'));
+  tomar('e',new RegExp('\\b(?:esp\\w*|pared|e\\s*[:=])\\s*[:=]?\\s*'+N,'g'));
+  const nums=(t.match(/\d+(?:[.,]\d+)?/g)||[]).map(n).filter(v=>v>0&&v<1000); // 1000 mm o más: es el largo de la barra
+  return {L,nums};
+}
+function formaKgm(it){ // forma de la sección según la descripción y el formato (subcategoría)
+  const t=sinAc(it.descripcion+' '+formatoItem(it)),cu=/cuadrad/.test(t);
+  if(/tubo|cano|buje/.test(t))return cu?'tcua':/rectang|estructural/.test(t)?'trec':'tred';
+  if(/angulo/.test(t))return 'ang';
+  if(/planchuela|pletina|fleje/.test(t))return 'pla';
+  if(/hexag/.test(t))return 'hex';
+  if(cu)return 'cua';
+  if(/perfil/.test(t))return 'perfil'; // U, T, doble T: no se calculan
+  if(/redond|macizo|barra/.test(t))return 'red';
+  return '';
+}
+function dimsKgm(f,L,nums){ // arma las medidas que pide cada forma; falta = qué dato no está
+  const r=[...nums],saca=v=>{r.splice(r.indexOf(v),1);return v},mx=()=>r.length?saca(Math.max(...r)):0,mn=()=>r.length?saca(Math.min(...r)):0;
+  if(f==='red'||f==='cua'||f==='hex'){const d=L.D||(r.length?r[0]:0);return d?{d}:{falta:f==='red'?'el diámetro':f==='hex'?'la medida entre caras':'el lado'}}
+  if(f==='tred'){const D=L.D||mx();let e=L.e||(L.di&&D?(D-L.di)/2:0)||(r.length?mn():0);
+    if(!D)return {falta:'el diámetro exterior'};if(!e)return {falta:'el espesor de pared'};if(2*e>=D)return {falta:'medidas coherentes (el espesor es muy grande)'};return {D,e}}
+  if(f==='pla'){const e=L.e||(r.length>=2?mn():0),a=mx();if(!a)return {falta:'el ancho'};if(!e)return {falta:'el espesor'};return {a,e}}
+  if(f==='tcua'||f==='trec'||f==='ang'){const e=L.e||(r.length>=2?mn():0),a=mx(),b=r.length?mx():(f==='trec'?0:a);
+    if(!a)return {falta:f==='ang'?'el ancho del ala':'el lado'};if(!e)return {falta:'el espesor'};if(!b)return {falta:'el segundo lado (a × b × e)'};return {a,b,e}}
+  return {falta:'la forma'};
+}
+function dimsFicha(f,m){ // las mismas medidas tomadas de los campos de la ficha (si la descripción no alcanza)
+  const D=num(m.diametro),e=num(m.espesor),a=num(m.ancho);
+  if(f==='red'||f==='cua'||f==='hex')return D?{d:D}:null;
+  if(f==='tred')return D&&e&&2*e<D?{D,e}:null;
+  if(f==='pla')return a&&e?{a,e}:null;
+  if(f==='ang'||f==='tcua')return a&&e?{a,b:a,e}:null;
+  return null;
+}
+function sugerirKgm(it){ // {est:'ok'|'falta'|'no', kgm, txt}: calcula el kg/m o dice qué falta, sin inventar valores
+  if(!aplicaKgm(it))return {est:'no',txt:esKgU(it.unidad)?'Se cuenta en Kg':AREAS[it.area]&&AREAS[it.area].tec?'Chapa, placa u hoja':'No es barra, tubo ni perfil'};
+  let f=formaKgm(it);if(!f)return {est:'falta',txt:'Falta la forma (redondo, tubo, ángulo…)'};
+  if(f==='perfil')return {est:'falta',txt:'Perfil U, T o doble T: cargá el valor de catálogo'};
+  const {L,nums}=leerMedidasTxt(it.descripcion);let m=dimsKgm(f,L,nums),de='';
+  if(m.falta){const x=dimsFicha(f,it.medidas||{});if(x){m=x;de=' · medidas de la ficha'}}
+  if(m.falta)return {est:'falta',txt:'Falta '+m.falta};
+  if(f==='ang')f=Math.abs(m.a-m.b)<1e-6?'angI':'angD';
+  if(f==='trec'&&Math.abs(m.a-m.b)<1e-6)f='tcua';
+  const dn=densKgmDe(it);if(!dn)return {est:'falta',txt:/inox/.test(sinAc(it.descripcion+' '+it.material))?'Falta el grado del inoxidable (304 o 316)':'Falta el material (o su densidad en Configuración)'};
+  const A={red:()=>Math.PI*m.d*m.d/4,cua:()=>m.d*m.d,hex:()=>0.866*m.d*m.d,pla:()=>m.a*m.e,tred:()=>Math.PI*(m.D-m.e)*m.e,
+    tcua:()=>2*m.e*(m.a+m.b-2*m.e),trec:()=>2*m.e*(m.a+m.b-2*m.e),angI:()=>m.e*(2*m.a-m.e),angD:()=>m.e*(m.a+m.b-m.e)}[f]();
+  const v=Math.round(A*dn.d/1000*100)/100,mm=x=>fmtN(Math.round(x*100)/100);
+  const med={red:'Ø'+mm(m.d)+' mm',cua:mm(m.d)+' × '+mm(m.d)+' mm',hex:mm(m.d)+' mm entre caras',pla:mm(m.a)+' × '+mm(m.e)+' mm',tred:'Ø'+mm(m.D)+' × '+mm(m.e)+' mm',tcua:mm(m.a)+' × '+mm(m.b)+' × '+mm(m.e)+' mm',trec:mm(m.a)+' × '+mm(m.b)+' × '+mm(m.e)+' mm',angI:mm(m.a)+' × '+mm(m.e)+' mm',angD:mm(m.a)+' × '+mm(m.b)+' × '+mm(m.e)+' mm'}[f];
+  return v>0?{est:'ok',kgm:v,txt:FORMAS_KGM[f]+' '+med+' · '+dn.n+' ('+fmt2(dn.d)+')'+de+(/^(tcua|trec|ang)/.test(f)?' · sin radios, ±3 %':'')}:{est:'falta',txt:'Revisá las medidas'};
+}
 const fmtMm=n=>Math.round(n).toLocaleString('es-AR')+' mm';
 const stockMm=it=>{const f=mmPor(it);return f?Math.round(it.stock*f):null}; // lo que puede leer ProducciónApp
 /* Packs (Pañol y Componentes): el stock va en la unidad de compra (caja, pack) y la app muestra las unidades sueltas */
@@ -919,10 +1001,10 @@ function renderLista(){
   if(matchMedia('(min-width:900px)').matches){
     const th=(k,n,c)=>`<th data-act="orden" data-v="${k}"${c?' class="n"':''}>${n}${f.orden===k?(f.dir>0?' ▲':' ▼'):''}</th>`;
     el.innerHTML=`<div class="tabla"><table><thead><tr>${th('estado','Estado')}${th('codigo','Código')}${th('descripcion','Descripción')}${th('cat','Categoría')}${th('marca','Marca')}${th('stock','Stock',1)}${th('minimo','Mín.',1)}<th>Ubicación</th><th></th></tr></thead><tbody>`+
-      conGrupos(l,cabFila,i=>`<tr data-act="${sm?'selItem':'ver'}" data-id="${i.id}"${es(i)?' class="elegido"':''}><td>${pildoras(i)}</td><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${medidas(i)?'<br><small class="tenue">'+esc(medidas(i))+'</small>':''}</td><td>${esc(rutaCat(i))}</td><td>${esc(i.marca||'')}</td><td class="n"><b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?`<br><small class="tenue">${conSub(i).slice(3)}</small>`:''}<div style="width:96px;margin:7px 0 2px auto">${nivel(i)}</div></td><td class="n">${fmt(i.minimo)}</td><td>${esc(i.ubicacion||'')}</td><td>${bot(i)}</td></tr>`)+`</tbody></table></div>`;
+      conGrupos(l,cabFila,i=>`<tr data-act="${sm?'selItem':'ver'}" data-id="${i.id}"${es(i)?' class="elegido"':''}><td>${pildoras(i)}</td><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${medKgm(i)?'<br><small class="tenue">'+esc(medKgm(i))+'</small>':''}</td><td>${esc(rutaCat(i))}</td><td>${esc(i.marca||'')}</td><td class="n"><b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?`<br><small class="tenue">${conSub(i).slice(3)}</small>`:''}<div style="width:96px;margin:7px 0 2px auto">${nivel(i)}</div></td><td class="n">${fmt(i.minimo)}</td><td>${esc(i.ubicacion||'')}</td><td>${bot(i)}</td></tr>`)+`</tbody></table></div>`;
   }else{
     el.innerHTML=`<div class="sec">`+conGrupos(l,cabTarj,i=>`<div class="tarj${es(i)?' elegido':''}" data-act="${sm?'selItem':'ver'}" data-id="${i.id}"><div class="entre" style="align-items:flex-start"><span class="t">${esc(i.descripcion)}</span><span class="fila" style="justify-content:flex-end">${pildoras(i)}</span></div>
-      <small class="tenue">${esc(i.codigo)} · ${esc(rutaCat(i))}${i.ubicacion?' · '+esc(i.ubicacion):''}${medidas(i)?'<br>'+esc(medidas(i)):''}</small>
+      <small class="tenue">${esc(i.codigo)} · ${esc(rutaCat(i))}${i.ubicacion?' · '+esc(i.ubicacion):''}${medKgm(i)?'<br>'+esc(medKgm(i)):''}</small>
       <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?` <small class="tenue">${conSub(i).slice(3)}</small>`:''} <small class="tenue">· mín. ${fmt(i.minimo)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`)+`</div>`;
   }
   if(sm){const n=S.sel.ids.size,oc=[...S.sel.ids].filter(id=>!S.sel.vis.includes(id)).length;el.insertAdjacentHTML('beforeend',`<div class="barra" style="margin-top:12px"><span><b>${n}</b> seleccionado${n===1?'':'s'}${oc?` <small style="color:var(--amar)">· ${oc} fuera del filtro</small>`:''}</span><span class="fila"><button class="chico" data-act="selVis">Todos los visibles</button><button class="chico" data-act="selNada">Ninguno</button><button class="chico pri" data-act="selEditar">Editar</button><button class="chico pel" data-act="selBorrar">Eliminar</button></span></div>`)}
@@ -972,7 +1054,7 @@ function verItem(id){
     <div class="sec" style="gap:0"><div class="entre"><h3>Reservas</h3><button class="chico res" data-act="reservar" data-id="${id}">Reservar</button></div>
       ${(it.reservas||[]).length?`<div class="lista">${it.reservas.map(r=>`<div class="reng" style="align-items:center"><div>${esc(nomR(r))}${cliR(r)?` <small class="tenue">· ${esc(cliR(r))}</small>`:''}<br><small>${r.oc?esc(r.oc)+' · ':''}${fmt(r.cantidad)} ${esc(it.unidad)} · ${dia(r.fecha)}${r.usuario?' · '+esc(r.usuario):''}</small></div><span class="fila" style="justify-content:flex-end"><button class="chico pri" data-act="usarRes" data-id="${id}" data-v="${r.id}">Usar</button><button class="chico" data-act="editRes" data-id="${id}" data-v="${r.id}">Editar</button><button class="chico pel" data-act="quitarRes" data-id="${id}" data-v="${r.id}">Quitar</button></span></div>`).join('')}</div>
       <small class="tenue" style="margin-top:6px">Reservado ${fmt(reservado(it))} ${esc(it.unidad)} · disponible ${fmt(disponible(it))} ${esc(it.unidad)}</small>`:'<small class="tenue">Nada reservado. Reservá cantidad para un proyecto o repuesto y deja de contar como disponible. Lo que no está reservado es stock de libre uso.</small>'}</div>
-    <dl class="datos">${fila('Categoría',rutaCat(it))}${fila('Stock mínimo',fmt(it.minimo)+' '+it.unidad)}${fila('Stock de pedido',fmt(it.cantPedido)+' '+it.unidad)}${fila('Material y medidas',medidas(it))}${packDe(it)?fila('Viene en',esc(it.unidad)+' de '+fmt(packDe(it))+' un'):''}${mmPor(it)&&!/^(m|mt|mts|metro|metros)$/.test(sinAc(it.unidad))?fila('Largo de barra',fmtMm(largoBarra(it))+(num((it.medidas||{}).largo)?'':' (estándar)')):''}${fila('Marca actual',it.marca)}${fila('Marcas sugeridas',(it.marcasSug||[]).join(', '))}${fila('Proveedor',it.proveedor)}${AREAS[it.area].tec&&kgUnDe(it)&&!/^(kg|kilo|kilos)$/.test(sinAc(it.unidad))?fila('Peso',fmt(kgUnDe(it))+' kg por '+it.unidad+(num(it.kgUn)&&!it.kgUnAuto?'':' (calculado)')):''}${filaCosto(it)}${fila('Ubicación',it.ubicacion)}${fila('Observaciones',it.obs)}</dl></div>
+    <dl class="datos">${fila('Categoría',rutaCat(it))}${fila('Stock mínimo',fmt(it.minimo)+' '+it.unidad)}${fila('Stock de pedido',fmt(it.cantPedido)+' '+it.unidad)}${fila('Material y medidas',medidas(it))}${packDe(it)?fila('Viene en',esc(it.unidad)+' de '+fmt(packDe(it))+' un'):''}${mmPor(it)&&!/^(m|mt|mts|metro|metros)$/.test(sinAc(it.unidad))?fila('Largo de barra',fmtMm(largoBarra(it))+(num((it.medidas||{}).largo)?'':' (estándar)')):''}${fila('Marca actual',it.marca)}${fila('Marcas sugeridas',(it.marcasSug||[]).join(', '))}${fila('Proveedor',it.proveedor)}${AREAS[it.area].tec&&kgUnDe(it)&&!/^(kg|kilo|kilos)$/.test(sinAc(it.unidad))?fila('Peso',fmt(kgUnDe(it))+' kg por '+it.unidad+(num(it.kgUn)&&!it.kgUnAuto?'':' (calculado)')):''}${num(it.kgm)>0?fila('Peso por metro',fmt2(it.kgm)+' kg/m'):''}${filaCosto(it)}${fila('Ubicación',it.ubicacion)}${fila('Observaciones',it.obs)}</dl></div>
     <div class="sec" style="gap:8px" ${pan('consumo')}><div class="entre"><h3>Consumo mensual</h3><span class="fila" style="flex-wrap:nowrap"><button class="chico" data-act="hMes" data-v="-1" aria-label="Meses anteriores">‹</button><small id="it-rango" class="tenue" style="min-width:104px;text-align:center"></small><button class="chico" data-act="hMes" data-v="1" aria-label="Meses siguientes">›</button></span></div>
       <div id="it-graf"><small class="tenue">Cargando…</small></div></div>
     <div class="sec" style="gap:0" ${pan('movs')}><div class="entre"><h3>Movimientos</h3><button class="chico" data-act="historial" data-id="${id}">Filtrar por fechas</button></div><div id="it-movs" class="lista"></div></div>
@@ -1029,6 +1111,7 @@ function formItem(area,id){
     ${AREAS[a].tec?'':`<label>Unidades por pack o caja (opcional)<input name="porPack" inputmode="decimal" value="${it.porPack||''}" placeholder="Vacío si se compra suelto"></label><small class="tenue" style="margin-top:-6px">Ej.: caja de 10 discos. El stock se cuenta en la unidad de arriba (caja, pack) y la app muestra también las unidades sueltas; en las salidas podés descontar por unidad.</small>`}
     <div class="dos"><label>Marca actual<input name="marca" list="dl-m" value="${esc(it.marca||'')}"></label><label>Proveedor habitual<input name="proveedor" list="dl-p" value="${esc(it.proveedor||'')}"></label></div>
     ${AREAS[a].tec?`<label>Peso por unidad (kg)<input name="kgUn" id="i-kg" inputmode="decimal" autocomplete="off" value="${num(it.kgUn)&&!it.kgUnAuto?it.kgUn:''}" placeholder="${kgUnCalc(it)?'Calculado: '+fmt(kgUnCalc(it))+' kg':'Se calcula con la densidad y las medidas'}"></label><small class="tenue" style="margin-top:-6px">Vacío = lo calcula la app con la densidad del material (Configuración) y las medidas. ComprasApp lo usa para pasar compras en Kg.</small>`:''}
+    ${AREAS[a].tec?`<div style="display:flex;flex-direction:column;gap:4px"><label for="i-kgm">Peso por metro (kg/m)</label><span class="fila" style="flex-wrap:nowrap"><input name="kgm" id="i-kgm" inputmode="decimal" autocomplete="off" value="${num(it.kgm)>0?fmt2(it.kgm):''}" placeholder="Vacío en chapas e ítems en Kg"><button type="button" class="chico" data-act="sugKgm">Sugerir</button></span></div><small class="tenue" id="i-kgm-msg" style="margin-top:-6px">Barras, tubos y perfiles. ProducciónApp lo usa para el peso y el costo de cada pieza. Si cargás el valor de catálogo, manda ese.</small>`:''}
     <div class="dos"><label>Costo unitario sin IVA<input name="costo" id="i-costo" inputmode="decimal" value="${it.costo||''}"></label><label>Moneda<select name="moneda" id="i-moneda">${opciones([{id:'USD',nombre:'Dólares (USD)'},{id:'ARS',nombre:'Pesos ($)'}],it.moneda||'USD')}</select></label></div>
     ${id&&it.costoInfo&&it.costoInfo.origen==='ComprasApp'?`<small class="tenue" style="margin-top:-6px">Costo actualizado por ComprasApp${it.costoInfo.oc?' ('+esc(it.costoInfo.oc)+')':''}. Si lo cambiás acá, queda en el historial y la próxima OC lo vuelve a actualizar.</small>`:''}
     <label>Marcas sugeridas (separadas por coma)<input name="marcasSug" value="${esc((it.marcasSug||[]).join(', '))}"></label>
@@ -1145,6 +1228,45 @@ async function verHistorial(id,desde,hasta){
 }
 
 /* ---------- Configuración ---------- */
+function bloqueKgm(){ // Configuración → Peso por metro: densidades editables y carga inicial
+  const l=S.cfg.densKgm||[],n=S.items.filter(i=>aplicaKgm(i)&&!(num(i.kgm)>0)).length;
+  return `<div class="bloque"><h2>Peso por metro (kg/m)</h2><small class="tenue">Para barras, tubos y perfiles. ProducciónApp lo lee para calcular el peso y el costo de material de cada pieza. El botón Sugerir de cada ítem lo calcula con la forma, las medidas y el material: kg/m = sección (mm²) × densidad ÷ 1000. Tubos y ángulos sin radios (±3 %).</small>
+    <form data-form="densKgm" class="sec" style="gap:8px"><h3>Densidades (g/cm³)</h3><div class="mapa">${l.map((x,i)=>`<span>${esc(x.n)}${x.r?'':` <button type="button" class="chico pel" data-act="densKgmQuitar" data-i="${i}" aria-label="Quitar ${esc(x.n)}">×</button>`}</span><input name="k_${i}" inputmode="decimal" aria-label="Densidad de ${esc(x.n)}" value="${fmtN(num(x.d))}">`).join('')}</div>
+      <small class="tenue">Un material agregado se reconoce cuando su nombre aparece en la descripción, el material o la categoría del ítem (ej.: UHMW, PP, APM).</small>
+      <div class="err" id="dk-err"></div><div class="fila"><button type="button" class="chico" data-act="densKgmAgregar">Agregar material</button><button class="chico pri">Guardar densidades</button></div></form>
+    <div class="sec" style="gap:8px"><h3>Carga inicial</h3><small class="tenue">${n?n+' ítem(s) de barras, tubos y perfiles todavía sin kg/m.':'Todos los ítems que llevan kg/m ya lo tienen.'} Primero muestra una tabla para revisar; no reemplaza un kg/m ya cargado salvo que lo tildes.</small><button class="chico" data-act="kgmMasivo" style="align-self:flex-start">Completar el kg/m de los ítems</button></div></div>`;
+}
+const EST_KG={ok:['verde','ok'],falta:['amarillo','falta dato'],no:['','no aplica']};
+function kgmMasivo(){ // carga inicial del kg/m: tabla con lo sugerido para revisar, corregir y destildar antes de aplicar
+  const l=S.items.filter(i=>AREAS[i.area].tec).sort((a,b)=>cmpAZ(a.codigo,b.codigo));
+  S.kgm={ver:'',filas:l.map(i=>{const g=sugerirKgm(i),ya=num(i.kgm)>0;return {id:i.id,est:g.est,txt:g.txt,ya,val:g.kgm?fmt2(g.kgm):'',chk:g.est==='ok'&&!ya}})};
+  const c=k=>S.kgm.filas.filter(r=>k==='ya'?r.ya:r.est===k).length;
+  abrir(`<div data-kgm class="sec"><div class="entre"><h2>Peso por metro · carga inicial</h2><button class="chico" data-act="cerrar">Cancelar</button></div>
+    <small class="tenue">Revisá lo sugerido: podés corregir el valor y destildar ítems. Los que ya tienen kg/m quedan sin tildar; tildalos solo si querés reemplazarlo. Si escribís un valor, el ítem se tilda solo.</small>
+    <label>Mostrar<select id="kg-ver">${opciones([{id:'ok',nombre:'ok ('+c('ok')+')'},{id:'falta',nombre:'falta dato ('+c('falta')+')'},{id:'no',nombre:'no aplica ('+c('no')+')'},{id:'ya',nombre:'ya tienen kg/m ('+c('ya')+')'}],'','Todos ('+S.kgm.filas.length+')')}</select></label>
+    <div id="kg-lista" class="lista"></div>
+    <div class="barra" style="bottom:0"><span id="kg-res"></span><span class="fila"><button class="chico" data-act="cerrar">Cancelar</button><button class="chico pri" data-act="kgmAplicar" id="kg-btn">Aplicar</button></span></div></div>`);
+  pintaKgm();
+}
+function pintaKgm(){ // dibuja los renglones según el filtro "Mostrar"
+  const K=S.kgm,el=$('#kg-lista');if(!K||!el)return;
+  const l=K.filas.map((r,k)=>[r,k]).filter(([r])=>!K.ver||(K.ver==='ya'?r.ya:r.est===K.ver));
+  el.innerHTML=l.length?l.map(([r,k])=>{const it=item(r.id);if(!it)return '';const [cl,et]=EST_KG[r.est];
+    return `<div class="reng" style="align-items:center;gap:10px"><input type="checkbox" class="kgchk" data-i="${k}"${r.chk?' checked':''} aria-label="Aplicar a ${esc(it.codigo)}"><div><b>${esc(it.codigo)}</b> · ${esc(it.descripcion)}<br><small class="tenue">${esc(r.txt)}</small>${r.ya?`<br><small style="color:var(--acento)">Ya tiene ${fmt2(it.kgm)} kg/m</small>`:''}</div>
+      <div class="der" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><input class="kgval" data-i="${k}" inputmode="decimal" autocomplete="off" value="${esc(r.val)}" placeholder="kg/m" style="width:92px;text-align:right" aria-label="kg/m de ${esc(it.codigo)}"><span class="pil ${cl}"${cl?'':' style="background:var(--panel2);color:var(--tenue)"'}>${et}</span></div></div>`}).join('')
+    :'<div class="vacio">No hay ítems en este grupo.</div>';
+  resKgm();
+}
+function resKgm(){const n=S.kgm.filas.filter(r=>r.chk).length,b=$('#kg-btn'),e=$('#kg-res');if(e)e.innerHTML=`<b>${n}</b> tildado${n===1?'':'s'}`;if(b)b.textContent='Aplicar a '+n}
+async function aplicarKgm(){
+  const F=S.kgm.filas.filter(r=>r.chk),mal=F.filter(r=>!(num(r.val)>0));
+  if(!F.length){toast('No hay ítems tildados');return}
+  if(mal.length){toast(mal.length+' tildado(s) sin un valor válido: corregilos o destildalos');return}
+  const pisa=F.filter(r=>r.ya).length;
+  if(!await confirmar(`Se guarda el kg/m en ${F.length} ítem(s)${pisa?'. '+pisa+' ya tenían un valor, que se reemplaza':''}. ¿Aplicar?`,'Aplicar'))return;
+  DB.lotePatch(F.map(r=>[r.id,{kgm:Math.round(num(r.val)*100)/100,actualizado:Date.now()}]));
+  S.kgm=null;cerrar();toast('kg/m guardado en '+F.length+' ítem(s)');
+}
 function bloqueReservas(){
   const fila=d=>{const nm=matsDeRes(d).length;return `<div class="reng" style="align-items:center;flex-wrap:wrap;gap:8px;${d.archivado?'opacity:.55':''}"><div style="flex:1 1 170px;min-width:0"><b>${esc(d.nombre)}</b>${d.codigo?' · '+esc(d.codigo):''}<br>
     <small class="tenue">${[d.cliente?'Cliente: '+esc(d.cliente):'',nm?nm+' material'+(nm===1?'':'es')+' reservado'+(nm===1?'':'s'):'',d.archivado?'Archivada':''].filter(Boolean).join(' · ')||'Sin uso todavía'}</small></div>
@@ -1189,6 +1311,7 @@ function vConfig(){
   <div class="bloque"><h2>Costos</h2><form data-form="costos" class="sec"><small class="tenue">Los costos van en dólares y sin IVA, por unidad de stock. ComprasApp los actualiza al emitir cada OC y el anterior queda en el historial del ítem.</small>
     <label>Preguntar antes de actualizar si el precio cambia más de (%)<input name="costoAvisoPct" id="cf-aviso" inputmode="decimal" value="${S.cfg.costoAvisoPct||25}"></label>
     <small class="tenue">Sirve para no tomar como costo una compra de urgencia o un precio fuera de lo normal.</small><div class="err" id="cs-err"></div><button class="pri" style="align-self:flex-start">Guardar</button></form></div>
+  ${bloqueKgm()}
   ${Object.keys(AREAS).map(area).join('')}
   <div class="bloque"><h2>Unidades de medida</h2>${chips('unidades')}</div>
   <div class="bloque"><h2>Marcas</h2>${chips('marcas')}</div>
@@ -1438,6 +1561,17 @@ document.addEventListener('click',async e=>{
   else if(act==='completarLargos'){const l=S.items.filter(i=>i.area===d.v&&esBarraF(d.v,formatoItem(i))&&!(num((i.medidas||{}).largo)>0));
     if(!l.length)return;if(!await confirmar('Se guarda el largo estándar en '+l.length+' ítem(s) de '+AREAS[d.v].n+'. Después podés cambiarlo en cada uno. ¿Seguir?','Guardar'))return;
     l.forEach(i=>DB.patchItem(i.id,{medidas:Object.assign({},i.medidas||{},{largo:largoStd(i.area,formatoItem(i))})}));toast(l.length+' ítem(s) con largo guardado');render()}
+  else if(act==='sugKgm'){ // Sugerir en el formulario: calcula con lo que está escrito, sin guardar
+    const f=b.closest('form'),x=Object.fromEntries(new FormData(f)),g=sugerirKgm({area:x.area,descripcion:x.descripcion||'',material:matElegido(x),catId:x.catId,subId:x.subId,unidad:x.unidad,medidas:{diametro:num(x.diametro),espesor:num(x.espesor),ancho:num(x.ancho)}}),m=$('#i-kgm-msg');
+    if(g.est==='ok')$('#i-kgm').value=fmt2(g.kgm);
+    m.textContent=g.est==='ok'?'✓ Sugerido: '+g.txt+'. Podés corregirlo antes de guardar.':g.est==='no'?'No aplica: '+g.txt+'. Dejalo vacío.':'No se calculó: '+g.txt+'.';m.style.color=g.est==='ok'?'var(--verde)':g.est==='no'?'':'var(--amar)'}
+  else if(act==='kgmMasivo')kgmMasivo();
+  else if(act==='kgmAplicar')aplicarKgm();
+  else if(act==='densKgmAgregar'){const n=await pedir('Material (como aparece en la descripción o el material)');if(!n)return;
+    if(S.cfg.densKgm.some(x=>sinAc(x.n)===sinAc(n))){toast('Ese material ya está');return}
+    const v=num(await pedir('Densidad de '+n+' (g/cm³)'));if(!(v>0)){toast('La densidad tiene que ser mayor que cero');return}
+    S.cfg.densKgm.push({n,d:v});guardarCfg();render();toast(n+' agregado')}
+  else if(act==='densKgmQuitar'){const x=S.cfg.densKgm[+d.i];if(x&&!x.r&&await confirmar('¿Quitar '+x.n+' de las densidades?','Quitar')){S.cfg.densKgm.splice(+d.i,1);guardarCfg();render()}}
   else if(act==='calcPesos'){const l=S.items.filter(i=>i.area===d.v&&!(num(i.kgUn)&&!i.kgUnAuto)&&kgUnCalc(i)!==num(i.kgUn));if(!l.length)return;
     l.forEach(i=>DB.patchItem(i.id,{kgUn:kgUnCalc(i),kgUnAuto:true}));toast(l.length+' ítem(s) con peso calculado');render()}
   else if(act==='resArchivar'){const r=reservaDe(d.v);if(r){DB.guardarReserva(r.id,{archivado:!r.archivado});toast(r.archivado?'Reserva reactivada':'Reserva archivada')}}
@@ -1488,6 +1622,7 @@ document.addEventListener('submit',e=>{
       const km=camposDe(base.formato);
       if(km&&km.dint&&num(d.espesor)>0&&num(d.diametro)>0&&2*num(d.espesor)>=num(d.diametro)){$('#i-err').textContent='Revisá las medidas: el espesor de pared es demasiado grande para ese diámetro exterior.';return}
       if(km)Object.keys(CAMPOS_M).forEach(n=>{if(!km[n])d[n]=''});base.medidas={espesor:num(d.espesor),diametro:num(d.diametro),ancho:num(d.ancho),largo:num(d.largo)}}
+    if(AREAS[d.area].tec){const t=String(d.kgm||'').trim();if(t!==''&&!(num(t)>0&&/^\d+([.,]\d+)?$/.test(t))){$('#i-err').textContent='Revisá el peso por metro: tiene que ser un número mayor que cero (o dejalo vacío).';return}base.kgm=t?Math.round(num(t)*100)/100:null} // kgm: lo lee ProducciónApp
     if(AREAS[d.area].tec){const k=num(d.kgUn),c0=kgUnCalc(Object.assign({area:d.area},base));base.kgUn=k>0?k:c0;base.kgUnAuto=!(k>0)}
     {const i0=d.id&&item(d.id);if(i0?(Math.abs((i0.costo||0)-base.costo)>1e-9||(i0.moneda||'USD')!==base.moneda):base.costo>0)Object.assign(base,cambioCosto(i0||{},base.costo,base.moneda,{origen:'StockApp'}))} // el costo anterior pasa al historial
     const ns=num(d.stock);if(String(d.stock||'').trim()!==''&&!/^\d+([.,]\d+)?$/.test(String(d.stock).trim())){$('#i-err').textContent='Revisá el stock actual: tiene que ser un número.';return}
@@ -1553,6 +1688,10 @@ document.addEventListener('submit',e=>{
     const v=num(d.costoAvisoPct);if(v<=0){$('#cs-err').textContent='Ingresá un porcentaje mayor que cero.';return}
     S.cfg.costoAvisoPct=v;guardarCfg();toast('Aviso de costos guardado');
   }
+  else if(tipo==='densKgm'){
+    const l=S.cfg.densKgm||[];if(l.some((x,i)=>!(num(d['k_'+i])>0))){$('#dk-err').textContent='Todas las densidades tienen que ser mayores que cero.';return}
+    l.forEach((x,i)=>x.d=num(d['k_'+i]));guardarCfg();render();toast('Densidades guardadas');
+  }
   else if(tipo==='densidades'){
     const ms=S.cfg.materiales[d.area]||[];ms.forEach((m,i)=>{const v=num(d['d_'+i]);if(v>0)S.cfg.densidades[m]=v;else delete S.cfg.densidades[m]});
     guardarCfg();render();toast('Densidades guardadas');
@@ -1605,6 +1744,11 @@ document.addEventListener('change',e=>{
   else if(e.target.classList.contains('spg')){compras().filter(i=>(i.proveedor||'Sin proveedor')===e.target.dataset.p&&!i.pedidoCurso).forEach(i=>e.target.checked?S.selPed.ids.add(i.id):S.selPed.ids.delete(i.id));pintarCompras()}
   else if(id==='imp-hoja'){S.imp.hoja=v;modalImportar()}
 });
+document.addEventListener('input',e=>{if(!S.kgm||!e.target.classList.contains('kgval'))return; // carga inicial del kg/m: escribir un valor lo tilda
+  const r=S.kgm.filas[+e.target.dataset.i];r.val=e.target.value;r.chk=num(r.val)>0;const c=$('#kg-lista .kgchk[data-i="'+e.target.dataset.i+'"]');if(c)c.checked=r.chk;resKgm()});
+document.addEventListener('change',e=>{if(!S.kgm)return;
+  if(e.target.classList.contains('kgchk')){S.kgm.filas[+e.target.dataset.i].chk=e.target.checked;resKgm()}
+  else if(e.target.id==='kg-ver'){S.kgm.ver=e.target.value;pintaKgm()}});
 document.addEventListener('toggle',e=>{const k=e.target.dataset&&e.target.dataset.k;if(k)S.abierto[k]=e.target.open},true);
 matchMedia('(min-width:900px)').addEventListener('change',()=>{if(AREAS[S.tab])renderLista()});
 
@@ -1742,6 +1886,7 @@ function demoDB(){
     async sigCodigos(area,cant,piso){let m=Math.max(maxCodigo(area),piso||0);return Array.from({length:cant},()=>AREAS[area].p+'-'+String(++m).padStart(4,'0'))},
     guardarItem(id,data){if(id)Object.assign(item(id),data);else{id=uid();S.items.push(Object.assign({id},data))}guardar();alDato();return id},
     patchItem(id,p){Object.assign(item(id),p);guardar();alDato()},
+    lotePatch(l){l.forEach(([id,p])=>{const r=item(id);if(r)Object.assign(r,p)});guardar();alDato()},
     borrarItem(id){S.items.splice(S.items.findIndex(i=>i.id===id),1);guardar();alDato()},
     mov(it,tipo,c,motivo,ref,patch,extra){const r=item(it.id);r.stock=Math.round((r.stock+(tipo==='entrada'?c:-c))*1e4)/1e4;Object.assign(r,patch);
       S.movs.unshift(Object.assign({id:uid(),itemId:r.id,codigo:r.codigo,descripcion:r.descripcion,area:r.area,unidad:r.unidad,tipo,cantidad:c,motivo,ref,usuario:S.user.nombre,fecha:Date.now(),stockRes:r.stock},extra||{}));guardar();alDato()},
@@ -1802,6 +1947,7 @@ function fireDB(){
       return l},
     guardarItem(id,data){const r=id?fs.collection('stockapp_items').doc(id):fs.collection('stockapp_items').doc();(id?r.update(data):r.set(data)).catch(fallo);return r.id},
     patchItem(id,p){fs.collection('stockapp_items').doc(id).update(p).catch(fallo)},
+    lotePatch(l){for(let i=0;i<l.length;i+=400){const b=fs.batch();l.slice(i,i+400).forEach(([id,p])=>b.update(fs.collection('stockapp_items').doc(id),p));b.commit().catch(fallo)}}, // varios ítems en una sola escritura
     borrarItem(id){fs.collection('stockapp_items').doc(id).delete().catch(fallo)},
     mov(it,tipo,c,motivo,ref,patch,extra){const b=fs.batch(),s=tipo==='entrada'?c:-c;
       b.set(fs.collection('stockapp_movimientos').doc(),Object.assign({itemId:it.id,codigo:it.codigo,descripcion:it.descripcion,area:it.area,unidad:it.unidad,tipo,cantidad:c,motivo,ref,usuario:S.user.nombre,email:S.user.email,fecha:Date.now(),stockRes:Math.round(((it.stock||0)+s)*1e4)/1e4},extra||{}));
