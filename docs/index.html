@@ -452,7 +452,7 @@ function conGrupos(l,cab,fila){ // arma la lista agrupada: cab dibuja el título
   return agrupar(l).map(g=>{const sub=g.subs.length>1||g.subs[0].sub!=='',n=g.subs.reduce((a,s)=>a+s.items.length,0);
     return cab(g.cat,n,false)+g.subs.map(s=>(sub?cab(s.sub||'Sin subcategoría',s.items.length,true):'')+s.items.map(fila).join('')).join('')}).join('');
 }
-const medKgm=i=>[medidas(i),num(i.kgm)>0?fmt2(i.kgm)+' kg/m':''].filter(Boolean).join(' · '); // medidas + kg/m para la lista de cada sección
+const medKgm=i=>[medidas(i),num(i.kgm)>0?fmt2(i.kgm)+' kg/m':'',esChapa(i)&&num(i.kgUn)>0?fmt2(i.kgUn)+' kg/un':''].filter(Boolean).join(' · '); // medidas + kg/m para la lista de cada sección
 const cabTarj=(n,c,sub)=>`<div class="grp${sub?' sub':''}">${esc(n)} <small>${c}</small></div>`; // título de grupo en el teléfono
 const cabFila=(n,c,sub)=>`<tr class="grp${sub?' sub':''}"><td colspan="9">${esc(n)} <small>${c}</small></td></tr>`; // título de grupo en la tabla de la PC
 function selMaterial(a,val,lote,id){ // lista de materiales de la pestaña, con opción de escribir uno nuevo
@@ -523,7 +523,7 @@ function cfgDefecto(){
       componentes:['Bandas','Electrónica / Electricidad','Motores / Reductores y variadores','Neumática','Rodamientos'].map(n=>c(n,[]))}};
 }
 function normCfg(c){ // completa lo que falte y ordena alfabéticamente
-  const d0=cfgDefecto();c=Object.assign(cfgDefecto(),c);c.categorias=c.categorias||{};c.materiales=c.materiales||{};c.medidasStd=c.medidasStd||{};c.densidades=c.densidades||{};if(!Array.isArray(c.densKgm)||!c.densKgm.length)c.densKgm=DENS_KGM.map(x=>Object.assign({},x));if(!(c.costoAvisoPct>0))c.costoAvisoPct=25;
+  const d0=cfgDefecto();c=Object.assign(cfgDefecto(),c);c.categorias=c.categorias||{};c.materiales=c.materiales||{};c.medidasStd=c.medidasStd||{};c.densidades=c.densidades||{};if(!Array.isArray(c.densKgm))c.densKgm=DENS_KGM.map(x=>Object.assign({},x));c.densKgm.forEach(x=>{if(!GRUPOS_D.includes(x.g))x.g=grupoDens(x)});if(!(c.costoAvisoPct>0))c.costoAvisoPct=25;
   const tx=(x,y)=>x.localeCompare(y,'es',{sensitivity:'base',numeric:true}),ab=(x,y)=>tx(x.nombre,y.nombre);
   for(const a in AREAS){const l=c.categorias[a]=c.categorias[a]||[];l.forEach(k=>(k.subs=k.subs||[]).sort(ab));l.sort(ab);
     c.materiales[a]=(c.materiales[a]||d0.materiales[a]||[]).sort(tx);c.medidasStd[a]=c.medidasStd[a]||{}}
@@ -618,7 +618,8 @@ function ponerCamposM(){ // muestra en la ficha solo las medidas del formato ele
    Se guarda en el ítem (kgUn; kgUnAuto = true si es calculado) para que ComprasApp lo pueda leer. */
 const DENS_DEF=[[/inox|aisi\s*-?\s*3\d\d/,7.93],[/aisi\s*-?\s*(4\d\d|630)|17-?4/,7.75],[/acero|sae\s*10\d\d|f-?24|carbono/,7.85],[/alumin/,2.7],[/bronce/,8.8],[/laton/,8.5],[/cobre/,8.94],[/acetal|delrin|\bpom\b/,1.41],[/uhmw|pead|polietileno/,0.94],[/\bpp\b|polipropileno/,0.91],[/grilon|nylon|poliamida/,1.14]];
 function densDef(t){t=sinAc(t);const x=DENS_DEF.find(([r])=>r.test(t));return x?x[1]:0}
-function densidadDe(it){ // g/cm³: la cargada en Configuración para el material; si no, la de la tabla por material o categoría
+function densidadDe(it){ // g/cm³: la de Configuración → Densidades (la misma del kg/m); si no se reconoce, la cargada antes por sección o la de referencia
+  const x0=densKgmDe(it);if(x0)return x0.d;
   const m=it.material||'',c=S.cfg.densidades||{},k=Object.keys(c).find(x=>sinAc(x)===sinAc(m));if(k&&num(c[k])>0)return num(c[k]);
   return densDef(m)||densDef((catDe(it)||{}).nombre||'')||(it.area==='aceros'?7.85:0);
 }
@@ -643,10 +644,19 @@ const kgUnDe=it=>num(it.kgUn)||kgUnCalc(it);
    Campo kgm del ítem: número en kg/m, con dos decimales. NO cambiar el nombre: ProducciónApp lo lee así. Vacío (null) = sin dato.
    Solo barras, tubos y perfiles (lo que se mide en metros); chapas, placas, ítems en Kg y Pañol/Componentes lo dejan vacío.
    kg/m = área de la sección (mm²) × densidad (g/cm³) ÷ 1000. Tubos y ángulos sin radios (±3 %): si se carga el valor de catálogo a mano, manda ese. */
-const DENS_KGM=[ // densidades de referencia (g/cm³); se editan en Configuración → Peso por metro. r = palabras que las reconocen
+const DENS_KGM=[ // densidades de referencia (g/cm³); se editan en Configuración → Densidades. r = palabras que las reconocen
   {n:'AISI 316',d:8.00,r:'\\b316'},{n:'AISI 304',d:7.93,r:'\\b304'},{n:'Acero al carbono',d:7.85,r:'carbono|sae\\s*-?\\s*10\\d\\d|\\b10[1-9]\\d\\b|f\\s*-?\\s*24|hierro|\\bst\\s*37|acero(?!\\s*inox)'},
   {n:'Aluminio',d:2.70,r:'alumin'},{n:'Resina (Delrin)',d:1.41,r:'delrin|acetal|\\bpom\\b|resina'},{n:'Nylon',d:1.14,r:'nylon|grilon|poliamida'},
   {n:'Teflón',d:2.20,r:'teflon|ptfe'},{n:'Bronce',d:8.8,r:'bronce'},{n:'Latón',d:8.5,r:'laton'}];
+const GRUPOS_D=['Aceros al carbono','Inoxidables','No ferrosos','Plásticos','Otros']; // grupos de Configuración → Densidades
+function grupoDens(x){ // grupo de un material: el elegido o, si no tiene, se deduce del nombre
+  if(x&&GRUPOS_D.includes(x.g))return x.g;const t=sinAc((x&&x.n)||'');
+  if(/inox|aisi|\b(2|3|4)\d\d\b|630|17-?4/.test(t))return 'Inoxidables';
+  if(/carbono|acero|hierro|sae|f-?24|st\s*37/.test(t))return 'Aceros al carbono';
+  if(/alumin|bronce|laton|cobre|zinc|plomo/.test(t))return 'No ferrosos';
+  if(/delrin|acetal|resina|pom|nylon|grilon|poliamida|teflon|ptfe|uhmw|pead|polietileno|\bpp\b|polipropileno|apm|nitrilo|vesconite|pvc|policarbonato|plast/.test(t))return 'Plásticos';
+  return 'Otros';
+}
 const FORMAS_KGM={red:'Macizo redondo',cua:'Macizo cuadrado',hex:'Hexagonal',pla:'Planchuela',tred:'Tubo redondo',tcua:'Tubo cuadrado',trec:'Tubo rectangular',angI:'Ángulo de alas iguales',angD:'Ángulo de alas desiguales'};
 const fmt2=n=>(Math.round(n*100)/100).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esKgU=u=>/^(kg|kgs|kilo|kilos)$/.test(sinAc(u||''));
@@ -720,6 +730,23 @@ function sugerirKgm(it){ // {est:'ok'|'falta'|'no', kgm, txt}: calcula el kg/m o
   const med={red:'Ø'+mm(m.d)+' mm',cua:mm(m.d)+' × '+mm(m.d)+' mm',hex:mm(m.d)+' mm entre caras',pla:mm(m.a)+' × '+mm(m.e)+' mm',tred:'Ø'+mm(m.D)+' × '+mm(m.e)+' mm',tcua:mm(m.a)+' × '+mm(m.b)+' × '+mm(m.e)+' mm',trec:mm(m.a)+' × '+mm(m.b)+' × '+mm(m.e)+' mm',angI:mm(m.a)+' × '+mm(m.e)+' mm',angD:mm(m.a)+' × '+mm(m.b)+' × '+mm(m.e)+' mm'}[f];
   return v>0?{est:'ok',kgm:v,txt:FORMAS_KGM[f]+' '+med+' · '+dn.n+' ('+fmt2(dn.d)+')'+de+(/^(tcua|trec|ang)/.test(f)?' · sin radios, ±3 %':'')}:{est:'falta',txt:'Revisá las medidas'};
 }
+const esChapa=it=>!!(AREAS[it.area]&&AREAS[it.area].tec)&&(/^(chapa|hoja|placa)/.test(sinAc(formatoItem(it)))||/\b(chapa|placa|hoja)\b/.test(sinAc(it.descripcion)));
+const esUnU=u=>/^(un|u|unidad|unidades|hoja|hojas|chapa|chapas|placa|placas)$/.test(sinAc(u||'un'));
+function sugerirKgUn(it){ // chapas y placas: kg de 1 unidad = espesor × ancho × largo (mm) × densidad ÷ 1.000.000. Si falta un dato lo dice, no inventa
+  if(!esChapa(it))return {est:'no',txt:'No es chapa ni placa'};
+  if(esKgU(it.unidad))return {est:'no',txt:'Se cuenta en Kg'};
+  if(!esUnU(it.unidad))return {est:'no',txt:'Se cuenta en '+it.unidad+', no por unidad'};
+  const m=it.medidas||{},st=stdDe(it.area,formatoItem(it))||{},de=[];let e=num(m.espesor),a=num(m.ancho),l=num(m.largo);
+  if(!e){const {L,nums}=leerMedidasTxt(it.descripcion||''),c=L.e?[L.e]:nums;if(c.length===1){e=c[0];de.push('espesor de la descripción')}}
+  if(!a&&st.ancho){a=st.ancho;de.push('ancho estándar')}
+  if(!l&&st.largo){l=st.largo;de.push('largo estándar')}
+  if(!e)return {est:'falta',txt:'Falta el espesor'};
+  if(!a)return {est:'falta',txt:'Falta el ancho (en la ficha o en las medidas estándar)'};
+  if(!l)return {est:'falta',txt:'Falta el largo (en la ficha o en las medidas estándar)'};
+  const dn=densKgmDe(it);if(!dn)return {est:'falta',txt:/inox/.test(sinAc(it.descripcion+' '+it.material))?'Falta el grado del inoxidable (304 o 316)':'Falta el material (o su densidad en Configuración)'};
+  const v=Math.round(e*a*l*dn.d/1e6*100)/100;
+  return v>0?{est:'ok',kg:v,txt:(formatoItem(it)||'Chapa')+' '+fmtN(e)+' × '+fmtN(a)+' × '+fmtN(l)+' mm · '+dn.n+' ('+fmt2(dn.d)+')'+(de.length?' · '+de.join(', '):'')}:{est:'falta',txt:'Revisá las medidas'};
+}
 const fmtMm=n=>Math.round(n).toLocaleString('es-AR')+' mm';
 const stockMm=it=>{const f=mmPor(it);return f?Math.round(it.stock*f):null}; // lo que puede leer ProducciónApp
 /* Packs (Pañol y Componentes): el stock va en la unidad de compra (caja, pack) y la app muestra las unidades sueltas */
@@ -746,6 +773,7 @@ function nivel(it,g){ // barra de nivel: stock frente al mínimo
   const min=it.minimo||0,e=min>0?estado(it):'sin',dp=Math.max(0,disponible(it)),max=Math.max(it.stock,min*2.5,min+(it.cantPedido||0),1),pf=dp>0?Math.max(3,Math.min(100,dp/max*100)):0,pr=it.stock>dp?Math.min(100,it.stock/max*100):0,pm=Math.min(100,min/max*100);
   return `<div class="nivel${g?' g':''}" role="img" aria-label="Stock ${fmt(it.stock)}, mínimo ${fmt(min)}">${pr?`<span class="fill res" style="width:${pr}%" title="Reservado ${fmt(reservado(it))}"></span>`:''}<span class="fill ${e}" style="width:${pf}%"></span>${min>0?`<span class="mk" style="left:${pm}%" title="Mínimo ${fmt(min)}"></span>`:''}</div>`;
 }
+const minTxt=it=>it.minimo>0?'mín. '+fmt(it.minimo):'sin mínimo';
 const ETI={rojo:'Realizar compra',amarillo:'Cerca del mínimo',verde:'Normal'};
 function pildoras(it){const e=estado(it);return (it.minimo>0?`<span class="pil ${e}">${ETI[e]}</span>`:`<span class="pil" style="background:var(--panel2);color:var(--tenue)">Sin mínimo</span>`)+(it.pedidoCurso?` <span class="pil ped">Pedido en curso</span>`:'')}
 function medidas(it){
@@ -891,7 +919,7 @@ function resBusqueda(){ // resultados del buscador general del inicio (todas las
   const q=sinAc(S.gq).split(/\s+/).filter(Boolean);if(!q.length)return '';
   const l=S.items.filter(i=>{const t=sinAc([i.codigo,i.descripcion,i.material,i.marca,i.proveedor,i.ubicacion].join(' '));return q.every(p=>t.includes(p))}).sort((a,b)=>a.codigo.localeCompare(b.codigo));
   if(!l.length)return '<div class="vacio">Ningún ítem coincide.</div>';
-  return `<div class="lista">${l.slice(0,20).map(i=>{const e=estado(i);return `<div class="reng" data-act="ver" data-id="${i.id}" style="cursor:pointer;gap:12px">${tile(i.area,'ch')}<div>${esc(i.descripcion)}<br><small>${esc(i.codigo)} · ${AREAS[i.area].n}${i.ubicacion?' · '+esc(i.ubicacion):''}</small></div><div class="der">${fmt(i.stock)} ${esc(i.unidad)}<br>${i.minimo>0&&e!=='verde'?`<span class="pil ${e}">${ETI[e]}</span>`:`<small>mín. ${fmt(i.minimo)}</small>`}</div></div>`}).join('')}</div>`
+  return `<div class="lista">${l.slice(0,20).map(i=>{const e=estado(i);return `<div class="reng" data-act="ver" data-id="${i.id}" style="cursor:pointer;gap:12px">${tile(i.area,'ch')}<div>${esc(i.descripcion)}<br><small>${esc(i.codigo)} · ${AREAS[i.area].n}${i.ubicacion?' · '+esc(i.ubicacion):''}</small></div><div class="der">${fmt(i.stock)} ${esc(i.unidad)}<br>${i.minimo>0&&e!=='verde'?`<span class="pil ${e}">${ETI[e]}</span>`:`<small>${minTxt(i)}</small>`}</div></div>`}).join('')}</div>`
     +(l.length>20?`<small class="tenue">Se muestran 20 de ${l.length}. Escribí más para afinar la búsqueda.</small>`:'');
 }
 function vCompras(){ // contenido de la ventana Lista de compras: ítems en mínimo agrupados por proveedor
@@ -1001,11 +1029,11 @@ function renderLista(){
   if(matchMedia('(min-width:900px)').matches){
     const th=(k,n,c)=>`<th data-act="orden" data-v="${k}"${c?' class="n"':''}>${n}${f.orden===k?(f.dir>0?' ▲':' ▼'):''}</th>`;
     el.innerHTML=`<div class="tabla"><table><thead><tr>${th('estado','Estado')}${th('codigo','Código')}${th('descripcion','Descripción')}${th('cat','Categoría')}${th('marca','Marca')}${th('stock','Stock',1)}${th('minimo','Mín.',1)}<th>Ubicación</th><th></th></tr></thead><tbody>`+
-      conGrupos(l,cabFila,i=>`<tr data-act="${sm?'selItem':'ver'}" data-id="${i.id}"${es(i)?' class="elegido"':''}><td>${pildoras(i)}</td><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${medKgm(i)?'<br><small class="tenue">'+esc(medKgm(i))+'</small>':''}</td><td>${esc(rutaCat(i))}</td><td>${esc(i.marca||'')}</td><td class="n"><b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?`<br><small class="tenue">${conSub(i).slice(3)}</small>`:''}<div style="width:96px;margin:7px 0 2px auto">${nivel(i)}</div></td><td class="n">${fmt(i.minimo)}</td><td>${esc(i.ubicacion||'')}</td><td>${bot(i)}</td></tr>`)+`</tbody></table></div>`;
+      conGrupos(l,cabFila,i=>`<tr data-act="${sm?'selItem':'ver'}" data-id="${i.id}"${es(i)?' class="elegido"':''}><td>${pildoras(i)}</td><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${medKgm(i)?'<br><small class="tenue">'+esc(medKgm(i))+'</small>':''}</td><td>${esc(rutaCat(i))}</td><td>${esc(i.marca||'')}</td><td class="n"><b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?`<br><small class="tenue">${conSub(i).slice(3)}</small>`:''}<div style="width:96px;margin:7px 0 2px auto">${nivel(i)}</div></td><td class="n">${i.minimo>0?fmt(i.minimo):'<small class="tenue">sin mín.</small>'}</td><td>${esc(i.ubicacion||'')}</td><td>${bot(i)}</td></tr>`)+`</tbody></table></div>`;
   }else{
     el.innerHTML=`<div class="sec">`+conGrupos(l,cabTarj,i=>`<div class="tarj${es(i)?' elegido':''}" data-act="${sm?'selItem':'ver'}" data-id="${i.id}"><div class="entre" style="align-items:flex-start"><span class="t">${esc(i.descripcion)}</span><span class="fila" style="justify-content:flex-end">${pildoras(i)}</span></div>
       <small class="tenue">${esc(i.codigo)} · ${esc(rutaCat(i))}${i.ubicacion?' · '+esc(i.ubicacion):''}${medKgm(i)?'<br>'+esc(medKgm(i)):''}</small>
-      <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?` <small class="tenue">${conSub(i).slice(3)}</small>`:''} <small class="tenue">· mín. ${fmt(i.minimo)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`)+`</div>`;
+      <div class="entre" style="gap:14px"><div class="stk"><span class="stock">Stock <b>${fmt(i.stock)}</b> ${esc(i.unidad)}${subF(i)?` <small class="tenue">${conSub(i).slice(3)}</small>`:''} <small class="tenue">· ${minTxt(i)}${reservado(i)?' · reservado '+fmt(reservado(i)):''}</small></span>${nivel(i)}</div>${bot(i)}</div></div>`)+`</div>`;
   }
   if(sm){const n=S.sel.ids.size,oc=[...S.sel.ids].filter(id=>!S.sel.vis.includes(id)).length;el.insertAdjacentHTML('beforeend',`<div class="barra" style="margin-top:12px"><span><b>${n}</b> seleccionado${n===1?'':'s'}${oc?` <small style="color:var(--amar)">· ${oc} fuera del filtro</small>`:''}</span><span class="fila"><button class="chico" data-act="selVis">Todos los visibles</button><button class="chico" data-act="selNada">Ninguno</button><button class="chico pri" data-act="selEditar">Editar</button><button class="chico pel" data-act="selBorrar">Eliminar</button></span></div>`)}
   if(fid)enfocar(filaDe(fid));
@@ -1046,7 +1074,7 @@ function verItem(id){
     <div class="entre" style="align-items:flex-start"><div class="fila" style="flex-wrap:nowrap;gap:12px;align-items:center">${tile(it.area)}<div><small class="tenue">${esc(it.codigo)} · ${AREAS[it.area].n}</small><h2>${esc(it.descripcion)}</h2></div></div>${S.desdeCompras?'<button class="chico" data-act="compras">Volver</button>':'<button class="chico" data-act="cerrar">Cerrar</button>'}</div>
     ${S.editor?`<div class="fila"><button class="chico" data-act="editar" data-id="${id}">Editar datos</button><button class="chico pel" data-act="borrar" data-id="${id}">Eliminar</button></div>`:''}
     <div class="fila">${pildoras(it)}</div>
-    <div class="entre"><span class="stock" style="flex:1;min-width:0">Stock <b>${fmt(it.stock)}</b> ${esc(it.unidad)} <small class="tenue">${subF(it)?conSub(it).slice(3)+' ':''}· mín. ${fmt(it.minimo)}${reservado(it)?'<br>disponible '+fmt(disponible(it))+' '+esc(it.unidad):''}</small></span><span class="fila" style="flex-wrap:nowrap"><button class="sal" data-act="mov" data-v="salida" data-id="${id}">− Salida</button><button class="ent" data-act="mov" data-v="entrada" data-id="${id}">+ Entrada</button></span></div>
+    <div class="entre"><span class="stock" style="flex:1;min-width:0">Stock <b>${fmt(it.stock)}</b> ${esc(it.unidad)} <small class="tenue">${subF(it)?conSub(it).slice(3)+' ':''}· ${minTxt(it)}${reservado(it)?'<br>disponible '+fmt(disponible(it))+' '+esc(it.unidad):''}</small></span><span class="fila" style="flex-wrap:nowrap"><button class="sal" data-act="mov" data-v="salida" data-id="${id}">− Salida</button><button class="ent" data-act="mov" data-v="entrada" data-id="${id}">+ Entrada</button></span></div>
     ${nivel(it,1)}
     ${it.pedidoCurso?`<div class="bloque" style="background:var(--azul-f)"><span>Pedido realizado el ${dia(it.pedidoCurso.fecha)} por ${fmt(it.pedidoCurso.cantidad)} ${esc(it.unidad)}<br><small class="tenue">${esc(quienPed(it.pedidoCurso))}</small></span><div class="fila"><button class="chico pri" data-act="ingresar" data-id="${id}">Ingresar mercadería</button><button class="chico" data-act="anularPed" data-id="${id}">Anular pedido</button></div></div>`:`<button data-act="pedido" data-id="${id}">Marcar pedido realizado</button>`}
     <div class="solapas" role="tablist">${sol('datos','Datos')}${sol('consumo','Consumo')}${sol('movs','Movimientos')}</div>
@@ -1054,7 +1082,7 @@ function verItem(id){
     <div class="sec" style="gap:0"><div class="entre"><h3>Reservas</h3><button class="chico res" data-act="reservar" data-id="${id}">Reservar</button></div>
       ${(it.reservas||[]).length?`<div class="lista">${it.reservas.map(r=>`<div class="reng" style="align-items:center"><div>${esc(nomR(r))}${cliR(r)?` <small class="tenue">· ${esc(cliR(r))}</small>`:''}<br><small>${r.oc?esc(r.oc)+' · ':''}${fmt(r.cantidad)} ${esc(it.unidad)} · ${dia(r.fecha)}${r.usuario?' · '+esc(r.usuario):''}</small></div><span class="fila" style="justify-content:flex-end"><button class="chico pri" data-act="usarRes" data-id="${id}" data-v="${r.id}">Usar</button><button class="chico" data-act="editRes" data-id="${id}" data-v="${r.id}">Editar</button><button class="chico pel" data-act="quitarRes" data-id="${id}" data-v="${r.id}">Quitar</button></span></div>`).join('')}</div>
       <small class="tenue" style="margin-top:6px">Reservado ${fmt(reservado(it))} ${esc(it.unidad)} · disponible ${fmt(disponible(it))} ${esc(it.unidad)}</small>`:'<small class="tenue">Nada reservado. Reservá cantidad para un proyecto o repuesto y deja de contar como disponible. Lo que no está reservado es stock de libre uso.</small>'}</div>
-    <dl class="datos">${fila('Categoría',rutaCat(it))}${fila('Stock mínimo',fmt(it.minimo)+' '+it.unidad)}${fila('Stock de pedido',fmt(it.cantPedido)+' '+it.unidad)}${fila('Material y medidas',medidas(it))}${packDe(it)?fila('Viene en',esc(it.unidad)+' de '+fmt(packDe(it))+' un'):''}${mmPor(it)&&!/^(m|mt|mts|metro|metros)$/.test(sinAc(it.unidad))?fila('Largo de barra',fmtMm(largoBarra(it))+(num((it.medidas||{}).largo)?'':' (estándar)')):''}${fila('Marca actual',it.marca)}${fila('Marcas sugeridas',(it.marcasSug||[]).join(', '))}${fila('Proveedor',it.proveedor)}${AREAS[it.area].tec&&kgUnDe(it)&&!/^(kg|kilo|kilos)$/.test(sinAc(it.unidad))?fila('Peso',fmt(kgUnDe(it))+' kg por '+it.unidad+(num(it.kgUn)&&!it.kgUnAuto?'':' (calculado)')):''}${num(it.kgm)>0?fila('Peso por metro',fmt2(it.kgm)+' kg/m'):''}${filaCosto(it)}${fila('Ubicación',it.ubicacion)}${fila('Observaciones',it.obs)}</dl></div>
+    <dl class="datos">${fila('Categoría',rutaCat(it))}${it.minimo>0?fila('Stock mínimo',fmt(it.minimo)+' '+it.unidad)+fila('Stock de pedido',fmt(it.cantPedido)+' '+it.unidad):fila('Stock mínimo','Sin mínimo (se compra por pedido)')}${fila('Material y medidas',medidas(it))}${packDe(it)?fila('Viene en',esc(it.unidad)+' de '+fmt(packDe(it))+' un'):''}${mmPor(it)&&!/^(m|mt|mts|metro|metros)$/.test(sinAc(it.unidad))?fila('Largo de barra',fmtMm(largoBarra(it))+(num((it.medidas||{}).largo)?'':' (estándar)')):''}${fila('Marca actual',it.marca)}${fila('Marcas sugeridas',(it.marcasSug||[]).join(', '))}${fila('Proveedor',it.proveedor)}${AREAS[it.area].tec&&kgUnDe(it)&&!/^(kg|kilo|kilos)$/.test(sinAc(it.unidad))?fila('Peso',fmt(kgUnDe(it))+' kg por '+it.unidad+(num(it.kgUn)&&!it.kgUnAuto?'':' (calculado)')):''}${num(it.kgm)>0?fila('Peso por metro',fmt2(it.kgm)+' kg/m'):''}${filaCosto(it)}${fila('Ubicación',it.ubicacion)}${fila('Observaciones',it.obs)}</dl></div>
     <div class="sec" style="gap:8px" ${pan('consumo')}><div class="entre"><h3>Consumo mensual</h3><span class="fila" style="flex-wrap:nowrap"><button class="chico" data-act="hMes" data-v="-1" aria-label="Meses anteriores">‹</button><small id="it-rango" class="tenue" style="min-width:104px;text-align:center"></small><button class="chico" data-act="hMes" data-v="1" aria-label="Meses siguientes">›</button></span></div>
       <div id="it-graf"><small class="tenue">Cargando…</small></div></div>
     <div class="sec" style="gap:0" ${pan('movs')}><div class="entre"><h3>Movimientos</h3><button class="chico" data-act="historial" data-id="${id}">Filtrar por fechas</button></div><div id="it-movs" class="lista"></div></div>
@@ -1098,7 +1126,7 @@ function formItem(area,id){
   const matL=selMaterial(a,it.material||'');
   const tec=AREAS[a].tec?`${matL}
     <div class="dos" id="i-med"><label data-m="diametro">Diámetro o lado (mm)<input name="diametro" id="i-diam" inputmode="decimal" value="${m.diametro||''}"></label><label data-m="ancho">Ancho (mm)<input name="ancho" id="i-ancho" inputmode="decimal" value="${m.ancho||''}"></label><label data-m="espesor">Espesor (mm)<input name="espesor" id="i-esp" inputmode="decimal" value="${m.espesor||''}"></label><label data-m="dint">Diámetro interior (mm)<input id="i-dint" inputmode="decimal" autocomplete="off" value="${m.diametro>0&&m.espesor>0?fmtN(m.diametro-2*m.espesor):''}"></label><label data-m="largo">Largo (mm)<input name="largo" id="i-largo" inputmode="decimal" value="${m.largo||''}"></label></div>`:matL;
-  S.detalle=null;
+  S.detalle=null;const sm=!!id&&!(it.minimo>0); // sin stock mínimo: no se pide mínimo ni pedido
   abrir(`<form data-form="item"><input type="hidden" name="id" value="${esc(id||'')}"><input type="hidden" name="area" id="i-area" value="${a}">
     <div class="entre"><h2>${id?'Editar '+esc(it.codigo):'Nuevo ítem de '+AREAS[a].n}</h2><small class="tenue">${id?'':'Código '+sigCodigo(a)}</small></div>
     <label>Descripción<input name="descripcion" required value="${esc(it.descripcion||'')}"></label>
@@ -1106,11 +1134,12 @@ function formItem(area,id){
     ${tec}
     <div class="dos"><label>Unidad de medida<select name="unidad">${opciones(ordenAZ([...new Set([...(S.cfg.unidades||[]),it.unidad])]),it.unidad)}</select></label>
       <label>Stock actual<input name="stock" id="i-stock" inputmode="decimal" value="${id?it.stock:0}"></label>
-      <label>Stock mínimo<input name="minimo" inputmode="decimal" required value="${it.minimo??''}"></label><label>Stock de pedido<input name="cantPedido" inputmode="decimal" required value="${it.cantPedido??''}"></label></div>
+      <label>Stock mínimo<input name="minimo" id="i-min" inputmode="decimal" value="${sm?'':it.minimo??''}"${sm?' disabled':''}></label><label>Stock de pedido<input name="cantPedido" id="i-cp" inputmode="decimal" value="${sm?'':it.cantPedido??''}"${sm?' disabled':''}></label></div>
+    <label class="check"><input type="checkbox" name="sinMin" id="i-sinmin"${sm?' checked':''}>Sin stock mínimo (se compra por pedido)</label>
     ${id?'<small class="tenue">Si cambiás el stock, la diferencia queda registrada en el historial como ajuste de inventario.</small>':''}
     ${AREAS[a].tec?'':`<label>Unidades por pack o caja (opcional)<input name="porPack" inputmode="decimal" value="${it.porPack||''}" placeholder="Vacío si se compra suelto"></label><small class="tenue" style="margin-top:-6px">Ej.: caja de 10 discos. El stock se cuenta en la unidad de arriba (caja, pack) y la app muestra también las unidades sueltas; en las salidas podés descontar por unidad.</small>`}
     <div class="dos"><label>Marca actual<input name="marca" list="dl-m" value="${esc(it.marca||'')}"></label><label>Proveedor habitual<input name="proveedor" list="dl-p" value="${esc(it.proveedor||'')}"></label></div>
-    ${AREAS[a].tec?`<label>Peso por unidad (kg)<input name="kgUn" id="i-kg" inputmode="decimal" autocomplete="off" value="${num(it.kgUn)&&!it.kgUnAuto?it.kgUn:''}" placeholder="${kgUnCalc(it)?'Calculado: '+fmt(kgUnCalc(it))+' kg':'Se calcula con la densidad y las medidas'}"></label><small class="tenue" style="margin-top:-6px">Vacío = lo calcula la app con la densidad del material (Configuración) y las medidas. ComprasApp lo usa para pasar compras en Kg.</small>`:''}
+    ${AREAS[a].tec?`<div style="display:flex;flex-direction:column;gap:4px"><label for="i-kg">Peso por unidad (kg)</label><span class="fila" style="flex-wrap:nowrap"><input name="kgUn" id="i-kg" inputmode="decimal" autocomplete="off" value="${num(it.kgUn)&&!it.kgUnAuto?fmtN(it.kgUn):''}" placeholder="${kgUnCalc(it)?'Calculado: '+fmt(kgUnCalc(it))+' kg':'Se calcula con la densidad y las medidas'}"><button type="button" class="chico" data-act="sugKgUn">Sugerir</button></span></div><small class="tenue" id="i-kg-msg" style="margin-top:-6px">Chapas y placas: Sugerir calcula el peso de una unidad (espesor × ancho × largo × densidad). Vacío = lo calcula la app. ComprasApp lo usa para pasar compras en Kg.</small>`:''}
     ${AREAS[a].tec?`<div style="display:flex;flex-direction:column;gap:4px"><label for="i-kgm">Peso por metro (kg/m)</label><span class="fila" style="flex-wrap:nowrap"><input name="kgm" id="i-kgm" inputmode="decimal" autocomplete="off" value="${num(it.kgm)>0?fmt2(it.kgm):''}" placeholder="Vacío en chapas e ítems en Kg"><button type="button" class="chico" data-act="sugKgm">Sugerir</button></span></div><small class="tenue" id="i-kgm-msg" style="margin-top:-6px">Barras, tubos y perfiles. ProducciónApp lo usa para el peso y el costo de cada pieza. Si cargás el valor de catálogo, manda ese.</small>`:''}
     <div class="dos"><label>Costo unitario sin IVA<input name="costo" id="i-costo" inputmode="decimal" value="${it.costo||''}"></label><label>Moneda<select name="moneda" id="i-moneda">${opciones([{id:'USD',nombre:'Dólares (USD)'},{id:'ARS',nombre:'Pesos ($)'}],it.moneda||'USD')}</select></label></div>
     ${id&&it.costoInfo&&it.costoInfo.origen==='ComprasApp'?`<small class="tenue" style="margin-top:-6px">Costo actualizado por ComprasApp${it.costoInfo.oc?' ('+esc(it.costoInfo.oc)+')':''}. Si lo cambiás acá, queda en el historial y la próxima OC lo vuelve a actualizar.</small>`:''}
@@ -1228,22 +1257,34 @@ async function verHistorial(id,desde,hasta){
 }
 
 /* ---------- Configuración ---------- */
-function bloqueKgm(){ // Configuración → Peso por metro: densidades editables y carga inicial
-  const l=S.cfg.densKgm||[],n=S.items.filter(i=>aplicaKgm(i)&&!(num(i.kgm)>0)).length;
-  return `<div class="bloque"><h2>Peso por metro (kg/m)</h2><small class="tenue">Para barras, tubos y perfiles. ProducciónApp lo lee para calcular el peso y el costo de material de cada pieza. El botón Sugerir de cada ítem lo calcula con la forma, las medidas y el material: kg/m = sección (mm²) × densidad ÷ 1000. Tubos y ángulos sin radios (±3 %).</small>
-    <form data-form="densKgm" class="sec" style="gap:8px"><h3>Densidades (g/cm³)</h3><div class="mapa">${l.map((x,i)=>`<span>${esc(x.n)}${x.r?'':` <button type="button" class="chico pel" data-act="densKgmQuitar" data-i="${i}" aria-label="Quitar ${esc(x.n)}">×</button>`}</span><input name="k_${i}" inputmode="decimal" aria-label="Densidad de ${esc(x.n)}" value="${fmtN(num(x.d))}">`).join('')}</div>
-      <small class="tenue">Un material agregado se reconoce cuando su nombre aparece en la descripción, el material o la categoría del ítem (ej.: UHMW, PP, APM).</small>
-      <div class="err" id="dk-err"></div><div class="fila"><button type="button" class="chico" data-act="densKgmAgregar">Agregar material</button><button class="chico pri">Guardar densidades</button></div></form>
-    <div class="sec" style="gap:8px"><h3>Carga inicial</h3><small class="tenue">${n?n+' ítem(s) de barras, tubos y perfiles todavía sin kg/m.':'Todos los ítems que llevan kg/m ya lo tienen.'} Primero muestra una tabla para revisar; no reemplaza un kg/m ya cargado salvo que lo tildes.</small><button class="chico" data-act="kgmMasivo" style="align-self:flex-start">Completar el kg/m de los ítems</button></div></div>`;
+function bloqueKgm(){ // Configuración → Densidades: tabla única por grupo (kg/m de barras y peso por unidad de chapas) y carga inicial de pesos
+  const l=S.cfg.densKgm||[],n=S.items.filter(i=>aplicaKgm(i)&&!(num(i.kgm)>0)).length,nc=S.items.filter(i=>esChapa(i)&&esUnU(i.unidad)&&!esKgU(i.unidad)&&!(num(i.kgUn)>0&&!i.kgUnAuto)).length;
+  const grupos=GRUPOS_D.map(g=>{const f=l.map((x,i)=>[x,i]).filter(([x])=>grupoDens(x)===g).sort((p,q)=>cmpAZ(p[0].n,q[0].n));
+    return f.length?`<h3 style="grid-column:1/-1;margin-top:6px">${g}</h3>`+f.map(([x,i])=>`<span>${esc(x.n)}</span><span class="fila" style="flex-wrap:nowrap;gap:6px"><input name="k_${i}" inputmode="decimal" aria-label="Densidad de ${esc(x.n)}" value="${fmtN(num(x.d))}"><small class="tenue" style="flex:none">g/cm³</small><button type="button" class="chico" data-act="densEditar" data-i="${i}" aria-label="Editar ${esc(x.n)}">Editar</button><button type="button" class="chico pel" data-act="densKgmQuitar" data-i="${i}" aria-label="Quitar ${esc(x.n)}">×</button></span>`).join(''):''}).join('');
+  return `<div class="bloque"><h2>Densidades</h2><small class="tenue">Una sola tabla para toda la app. Con la densidad, la forma y las medidas se calcula el peso por metro (kg/m = sección mm² × densidad ÷ 1000; lo lee ProducciónApp) y el peso por unidad de chapas y placas (espesor × ancho × largo × densidad; lo usa ComprasApp). Tubos y ángulos sin radios (±3 %).</small>
+    <form data-form="densKgm" class="sec" style="gap:8px"><div class="mapa">${grupos||'<small class="tenue" style="grid-column:1/-1">No hay materiales cargados.</small>'}</div>
+      <small class="tenue">Un material se reconoce cuando su nombre aparece en la descripción, el material o la categoría del ítem (ej.: UHMW, PP, APM). Los de fábrica también se reconocen por sus palabras habituales (Resina: delrin, acetal, POM) aunque les cambies el nombre.</small>
+      <div class="err" id="dk-err"></div><div class="fila"><button type="button" class="chico" data-act="densEditar" data-i="-1">Agregar material</button><button class="chico pri">Guardar densidades</button></div></form>
+    <div class="sec" style="gap:8px"><h3>Carga inicial de pesos</h3><small class="tenue">${n||nc?[n?n+' barra(s), tubo(s) o perfil(es) sin kg/m':'',nc?nc+' chapa(s) o placa(s) sin peso por unidad':''].filter(Boolean).join(' · ')+'.':'Todos los ítems ya tienen su peso cargado.'} Primero muestra una tabla para revisar; no reemplaza un valor ya cargado salvo que lo tildes.</small><button class="chico" data-act="kgmMasivo" style="align-self:flex-start">Completar los pesos de los ítems</button></div></div>`;
+}
+function formDens(i){ // agregar (i = -1) o editar un material de la tabla de densidades
+  const x=i>=0?S.cfg.densKgm[i]:{n:'',d:'',g:'Otros'};if(!x)return;
+  abrir(`<form data-form="densEdit"><input type="hidden" name="i" value="${i}"><h2>${i>=0?'Editar material':'Agregar material'}</h2>
+    <label>Nombre (como aparece en la descripción o el material)<input name="n" id="de-n" required autocomplete="off" value="${esc(x.n)}"></label>
+    <div class="dos"><label>Grupo<select name="g">${opciones(GRUPOS_D,grupoDens(x))}</select></label><label>Densidad (g/cm³)<input name="d" inputmode="decimal" required autocomplete="off" value="${x.d?fmtN(num(x.d)):''}"></label></div>
+    ${x.r?'<small class="tenue">Es de los de fábrica: aunque le cambies el nombre, se sigue reconociendo por sus palabras habituales.</small>':''}
+    <div class="err" id="de-err"></div><div class="fila" style="justify-content:flex-end"><button type="button" data-act="cerrarM2">Cancelar</button><button class="pri">Guardar</button></div></form>`,'#m2');
+  $('#m2')._cancelar=()=>cerrar('#m2');$('#de-n').focus();
 }
 const EST_KG={ok:['verde','ok'],falta:['amarillo','falta dato'],no:['','no aplica']};
 function kgmMasivo(){ // carga inicial del kg/m: tabla con lo sugerido para revisar, corregir y destildar antes de aplicar
   const l=S.items.filter(i=>AREAS[i.area].tec).sort((a,b)=>cmpAZ(a.codigo,b.codigo));
-  S.kgm={ver:'',filas:l.map(i=>{const g=sugerirKgm(i),ya=num(i.kgm)>0;return {id:i.id,est:g.est,txt:g.txt,ya,val:g.kgm?fmt2(g.kgm):'',chk:g.est==='ok'&&!ya}})};
+  S.kgm={ver:'',filas:l.map(i=>{const ch=esChapa(i),g=ch?sugerirKgUn(i):sugerirKgm(i),v=ch?g.kg:g.kgm,ya=ch?num(i.kgUn)>0&&!i.kgUnAuto:num(i.kgm)>0; // chapas y placas: peso por unidad (kgUn); el resto: kg/m
+    return {id:i.id,ch,est:g.est,txt:g.txt,ya,val:v?fmtN(v):'',chk:g.est==='ok'&&!ya}})};
   const c=k=>S.kgm.filas.filter(r=>k==='ya'?r.ya:r.est===k).length;
-  abrir(`<div data-kgm class="sec"><div class="entre"><h2>Peso por metro · carga inicial</h2><button class="chico" data-act="cerrar">Cancelar</button></div>
-    <small class="tenue">Revisá lo sugerido: podés corregir el valor y destildar ítems. Los que ya tienen kg/m quedan sin tildar; tildalos solo si querés reemplazarlo. Si escribís un valor, el ítem se tilda solo.</small>
-    <label>Mostrar<select id="kg-ver">${opciones([{id:'ok',nombre:'ok ('+c('ok')+')'},{id:'falta',nombre:'falta dato ('+c('falta')+')'},{id:'no',nombre:'no aplica ('+c('no')+')'},{id:'ya',nombre:'ya tienen kg/m ('+c('ya')+')'}],'','Todos ('+S.kgm.filas.length+')')}</select></label>
+  abrir(`<div data-kgm class="sec"><div class="entre"><h2>Pesos · carga inicial</h2><button class="chico" data-act="cerrar">Cancelar</button></div>
+    <small class="tenue">Barras, tubos y perfiles llevan kg/m; chapas y placas, kg por unidad. Revisá lo sugerido: podés corregir el valor y destildar ítems. Los que ya tienen su peso quedan sin tildar; tildalos solo si querés reemplazarlo. Si escribís un valor, el ítem se tilda solo.</small>
+    <label>Mostrar<select id="kg-ver">${opciones([{id:'ok',nombre:'ok ('+c('ok')+')'},{id:'falta',nombre:'falta dato ('+c('falta')+')'},{id:'no',nombre:'no aplica ('+c('no')+')'},{id:'ya',nombre:'ya tienen peso ('+c('ya')+')'}],'','Todos ('+S.kgm.filas.length+')')}</select></label>
     <div id="kg-lista" class="lista"></div>
     <div class="barra" style="bottom:0"><span id="kg-res"></span><span class="fila"><button class="chico" data-act="cerrar">Cancelar</button><button class="chico pri" data-act="kgmAplicar" id="kg-btn">Aplicar</button></span></div></div>`);
   pintaKgm();
@@ -1252,8 +1293,8 @@ function pintaKgm(){ // dibuja los renglones según el filtro "Mostrar"
   const K=S.kgm,el=$('#kg-lista');if(!K||!el)return;
   const l=K.filas.map((r,k)=>[r,k]).filter(([r])=>!K.ver||(K.ver==='ya'?r.ya:r.est===K.ver));
   el.innerHTML=l.length?l.map(([r,k])=>{const it=item(r.id);if(!it)return '';const [cl,et]=EST_KG[r.est];
-    return `<div class="reng" style="align-items:center;gap:10px"><input type="checkbox" class="kgchk" data-i="${k}"${r.chk?' checked':''} aria-label="Aplicar a ${esc(it.codigo)}"><div><b>${esc(it.codigo)}</b> · ${esc(it.descripcion)}<br><small class="tenue">${esc(r.txt)}</small>${r.ya?`<br><small style="color:var(--acento)">Ya tiene ${fmt2(it.kgm)} kg/m</small>`:''}</div>
-      <div class="der" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><input class="kgval" data-i="${k}" inputmode="decimal" autocomplete="off" value="${esc(r.val)}" placeholder="kg/m" style="width:92px;text-align:right" aria-label="kg/m de ${esc(it.codigo)}"><span class="pil ${cl}"${cl?'':' style="background:var(--panel2);color:var(--tenue)"'}>${et}</span></div></div>`}).join('')
+    return `<div class="reng" style="align-items:center;gap:10px"><input type="checkbox" class="kgchk" data-i="${k}"${r.chk?' checked':''} aria-label="Aplicar a ${esc(it.codigo)}"><div><b>${esc(it.codigo)}</b> · ${esc(it.descripcion)}<br><small class="tenue">${esc(r.txt)}</small>${r.ya?`<br><small style="color:var(--acento)">Ya tiene ${r.ch?fmt2(it.kgUn)+' kg por '+esc(it.unidad):fmt2(it.kgm)+' kg/m'}</small>`:''}</div>
+      <div class="der" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><input class="kgval" data-i="${k}" inputmode="decimal" autocomplete="off" value="${esc(r.val)}" placeholder="${r.ch?'kg/un':'kg/m'}" style="width:92px;text-align:right" aria-label="${r.ch?'kg por unidad':'kg/m'} de ${esc(it.codigo)}"><span class="pil ${cl}"${cl?'':' style="background:var(--panel2);color:var(--tenue)"'}>${et}</span></div></div>`}).join('')
     :'<div class="vacio">No hay ítems en este grupo.</div>';
   resKgm();
 }
@@ -1263,9 +1304,9 @@ async function aplicarKgm(){
   if(!F.length){toast('No hay ítems tildados');return}
   if(mal.length){toast(mal.length+' tildado(s) sin un valor válido: corregilos o destildalos');return}
   const pisa=F.filter(r=>r.ya).length;
-  if(!await confirmar(`Se guarda el kg/m en ${F.length} ítem(s)${pisa?'. '+pisa+' ya tenían un valor, que se reemplaza':''}. ¿Aplicar?`,'Aplicar'))return;
-  DB.lotePatch(F.map(r=>[r.id,{kgm:Math.round(num(r.val)*100)/100,actualizado:Date.now()}]));
-  S.kgm=null;cerrar();toast('kg/m guardado en '+F.length+' ítem(s)');
+  if(!await confirmar(`Se guarda el peso en ${F.length} ítem(s)${pisa?'. '+pisa+' ya tenían un valor, que se reemplaza':''}. ¿Aplicar?`,'Aplicar'))return;
+  DB.lotePatch(F.map(r=>{const v=Math.round(num(r.val)*100)/100;return [r.id,Object.assign(r.ch?{kgUn:v,kgUnAuto:false}:{kgm:v},{actualizado:Date.now()})]}));
+  S.kgm=null;cerrar();toast('Peso guardado en '+F.length+' ítem(s)');
 }
 function bloqueReservas(){
   const fila=d=>{const nm=matsDeRes(d).length;return `<div class="reng" style="align-items:center;flex-wrap:wrap;gap:8px;${d.archivado?'opacity:.55':''}"><div style="flex:1 1 170px;min-width:0"><b>${esc(d.nombre)}</b>${d.codigo?' · '+esc(d.codigo):''}<br>
@@ -1294,10 +1335,8 @@ function vConfig(){
   const largos=a=>{const n=S.items.filter(i=>i.area===a&&esBarraF(a,formatoItem(i))&&!(num((i.medidas||{}).largo)>0)).length;
     return `<div class="sec" style="gap:8px"><h3>Largo de las barras</h3><small class="tenue">El stock de barras, caños, tubos, perfiles, planchuelas y bujes se cuenta por unidad y la app lo muestra también en mm (stock × largo de la barra). Si un ítem no tiene largo se usa el estándar de arriba${LARGO_DEF[a]?' o, si no hay, '+fmtMm(LARGO_DEF[a]):''}.</small>
       ${n?`<button class="chico" data-act="completarLargos" data-v="${a}" style="align-self:flex-start">Guardar el largo estándar en ${n} ítem${n===1?'':'s'} sin largo</button>`:'<small class="tenue">Todos los ítems tienen su largo cargado.</small>'}</div>`};
-  const dens=a=>{const ms=S.cfg.materiales[a]||[],n=S.items.filter(i=>i.area===a&&!(num(i.kgUn)&&!i.kgUnAuto)&&kgUnCalc(i)!==num(i.kgUn)).length;
-    return `<form data-form="densidades" class="sec" style="gap:8px"><input type="hidden" name="area" value="${a}"><h3>Densidad de los materiales (g/cm³)</h3><small class="tenue">Con la densidad y las medidas la app calcula cuánto pesa cada barra, metro o chapa. Vacío = valor de referencia (el gris).</small>
-      ${ms.length?`<div class="mapa">${ms.map((m,i)=>`<span>${esc(m)}</span><input name="d_${i}" inputmode="decimal" aria-label="Densidad de ${esc(m)}" value="${(S.cfg.densidades||{})[m]||''}" placeholder="${densDef(m)?fmt(densDef(m)):'Sin dato'}">`).join('')}</div><button class="chico pri" style="align-self:flex-start">Guardar densidades</button>`:'<small class="tenue">Primero cargá los materiales.</small>'}
-      ${n?`<button type="button" class="chico" data-act="calcPesos" data-v="${a}" style="align-self:flex-start">Calcular el peso en ${n} ítem${n===1?'':'s'}</button>`:''}</form>`};
+  const dens=a=>{const n=S.items.filter(i=>i.area===a&&!(num(i.kgUn)&&!i.kgUnAuto)&&kgUnCalc(i)!==num(i.kgUn)).length; // las densidades ahora están en Configuración → Densidades
+    return n?`<div class="sec" style="gap:8px"><h3>Peso por unidad</h3><small class="tenue">Se calcula con las medidas y la densidad de Configuración → Densidades.</small><button type="button" class="chico" data-act="calcPesos" data-v="${a}" style="align-self:flex-start">Calcular el peso en ${n} ítem${n===1?'':'s'}</button></div>`:''};
   const area=a=>`<details class="bloque" data-k="${a}"${S.abierto[a]?' open':''}><summary><h2>${AREAS[a].n}</h2></summary><div class="sec">
     <div class="sec" style="gap:0"><div class="entre"><h3>Categorías y subcategorías</h3><button class="chico" data-act="catNueva" data-v="${a}">Categoría</button></div>
     ${cats(a).map((c,ci)=>`<div class="cat"><div class="entre"><b>${esc(c.nombre)}</b>${bc(a,ci)}</div>${(c.subs||[]).map((s,si)=>`<div class="entre sub"><span>${esc(s.nombre)}</span>${bc(a,ci,si)}</div>`).join('')}<button class="chico" data-act="subNueva" data-v="${a}" data-c="${ci}" style="align-self:flex-start;margin-left:18px">Subcategoría</button></div>`).join('')}</div>
@@ -1565,13 +1604,14 @@ document.addEventListener('click',async e=>{
     const f=b.closest('form'),x=Object.fromEntries(new FormData(f)),g=sugerirKgm({area:x.area,descripcion:x.descripcion||'',material:matElegido(x),catId:x.catId,subId:x.subId,unidad:x.unidad,medidas:{diametro:num(x.diametro),espesor:num(x.espesor),ancho:num(x.ancho)}}),m=$('#i-kgm-msg');
     if(g.est==='ok')$('#i-kgm').value=fmt2(g.kgm);
     m.textContent=g.est==='ok'?'✓ Sugerido: '+g.txt+'. Podés corregirlo antes de guardar.':g.est==='no'?'No aplica: '+g.txt+'. Dejalo vacío.':'No se calculó: '+g.txt+'.';m.style.color=g.est==='ok'?'var(--verde)':g.est==='no'?'':'var(--amar)'}
+  else if(act==='sugKgUn'){ // Sugerir el peso por unidad de una chapa o placa con lo que está escrito, sin guardar
+    const f=b.closest('form'),x=Object.fromEntries(new FormData(f)),g=sugerirKgUn({area:x.area,descripcion:x.descripcion||'',material:matElegido(x),catId:x.catId,subId:x.subId,unidad:x.unidad,medidas:{espesor:num(x.espesor),ancho:num(x.ancho),largo:num(x.largo)}}),m=$('#i-kg-msg');
+    if(g.est==='ok')$('#i-kg').value=fmtN(g.kg);
+    m.textContent=g.est==='ok'?'✓ Sugerido: '+g.txt+'. Podés corregirlo antes de guardar.':g.est==='no'?'No aplica: '+g.txt+'. En barras y tubos dejalo vacío: lo calcula la app.':'No se calculó: '+g.txt+'.';m.style.color=g.est==='ok'?'var(--verde)':g.est==='no'?'':'var(--amar)'}
   else if(act==='kgmMasivo')kgmMasivo();
   else if(act==='kgmAplicar')aplicarKgm();
-  else if(act==='densKgmAgregar'){const n=await pedir('Material (como aparece en la descripción o el material)');if(!n)return;
-    if(S.cfg.densKgm.some(x=>sinAc(x.n)===sinAc(n))){toast('Ese material ya está');return}
-    const v=num(await pedir('Densidad de '+n+' (g/cm³)'));if(!(v>0)){toast('La densidad tiene que ser mayor que cero');return}
-    S.cfg.densKgm.push({n,d:v});guardarCfg();render();toast(n+' agregado')}
-  else if(act==='densKgmQuitar'){const x=S.cfg.densKgm[+d.i];if(x&&!x.r&&await confirmar('¿Quitar '+x.n+' de las densidades?','Quitar')){S.cfg.densKgm.splice(+d.i,1);guardarCfg();render()}}
+  else if(act==='densEditar')formDens(+d.i);
+  else if(act==='densKgmQuitar'){const x=S.cfg.densKgm[+d.i];if(x&&await confirmar('¿Quitar '+x.n+' de las densidades? '+(x.r?'Es de los de fábrica: los ítems de ese material van a quedar como "falta dato" hasta que lo vuelvas a agregar. ':'')+'Los pesos ya guardados no cambian.','Quitar')){S.cfg.densKgm.splice(+d.i,1);guardarCfg();render()}}
   else if(act==='calcPesos'){const l=S.items.filter(i=>i.area===d.v&&!(num(i.kgUn)&&!i.kgUnAuto)&&kgUnCalc(i)!==num(i.kgUn));if(!l.length)return;
     l.forEach(i=>DB.patchItem(i.id,{kgUn:kgUnCalc(i),kgUnAuto:true}));toast(l.length+' ítem(s) con peso calculado');render()}
   else if(act==='resArchivar'){const r=reservaDe(d.v);if(r){DB.guardarReserva(r.id,{archivado:!r.archivado});toast(r.archivado?'Reserva reactivada':'Reserva archivada')}}
@@ -1613,8 +1653,9 @@ document.addEventListener('submit',e=>{
   const f=e.target.closest('[data-form]');if(!f)return;e.preventDefault();
   const d=Object.fromEntries(new FormData(f)),tipo=f.dataset.form;
   if(tipo==='item'){
-    const min=num(d.minimo),cp=num(d.cantPedido);
-    if(min<0||cp<=0){$('#i-err').textContent='El stock mínimo no puede ser negativo y el stock de pedido debe ser mayor que cero.';return}
+    const sinMin=!!d.sinMin,min=sinMin?0:num(d.minimo),cp=sinMin?0:num(d.cantPedido); // sin mínimo: los dos quedan en 0 y el ítem nunca pasa a la Lista de compras
+    if(min<0||cp<0){$('#i-err').textContent='El stock mínimo y el de pedido no pueden ser negativos.';return}
+    if(min>0&&cp<=0){$('#i-err').textContent='Con stock mínimo, el stock de pedido tiene que ser mayor que cero. Si no llevás mínimo, tildá "Sin stock mínimo".';return}
     const base={descripcion:d.descripcion.trim(),catId:d.catId||'',subId:d.subId||'',unidad:d.unidad,minimo:min,cantPedido:cp,marca:(d.marca||'').trim(),proveedor:(d.proveedor||'').trim(),
       marcasSug:(d.marcasSug||'').split(',').map(x=>x.trim()).filter(Boolean),ubicacion:(d.ubicacion||'').trim(),obs:(d.obs||'').trim(),plazo:Math.max(0,Math.round(num(d.plazo))),porPack:AREAS[d.area].tec?0:(num(d.porPack)>1?num(d.porPack):0),costo:Math.max(0,num(d.costo)),moneda:d.moneda==='ARS'?'ARS':'USD',actualizado:Date.now()};
     base.material=matElegido(d);aprender(d.area,base);
@@ -1692,9 +1733,13 @@ document.addEventListener('submit',e=>{
     const l=S.cfg.densKgm||[];if(l.some((x,i)=>!(num(d['k_'+i])>0))){$('#dk-err').textContent='Todas las densidades tienen que ser mayores que cero.';return}
     l.forEach((x,i)=>x.d=num(d['k_'+i]));guardarCfg();render();toast('Densidades guardadas');
   }
-  else if(tipo==='densidades'){
-    const ms=S.cfg.materiales[d.area]||[];ms.forEach((m,i)=>{const v=num(d['d_'+i]);if(v>0)S.cfg.densidades[m]=v;else delete S.cfg.densidades[m]});
-    guardarCfg();render();toast('Densidades guardadas');
+  else if(tipo==='densEdit'){
+    const i=+d.i,n=(d.n||'').trim(),v=num(d.d),er=$('#de-err'),l=S.cfg.densKgm;
+    if(!n){er.textContent='Escribí el nombre del material.';return}
+    if(!(v>0)){er.textContent='La densidad tiene que ser mayor que cero.';return}
+    if(l.some((x,k)=>k!==i&&sinAc(x.n)===sinAc(n))){er.textContent='Ya hay un material con ese nombre.';return}
+    const g=GRUPOS_D.includes(d.g)?d.g:'Otros';if(i>=0)Object.assign(l[i],{n,d:v,g});else l.push({n,d:v,g});
+    cerrar('#m2');guardarCfg();render();toast(i>=0?'Material actualizado':n+' agregado');
   }
   else if(tipo==='sugCfg'){
     const pl=Math.round(num(d.plazoDef)),sg=num(d.seguridadPct),cb=num(d.coberturaMeses);
@@ -1722,6 +1767,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const id=e.target.id,v=e.target.value,f=S.f[S.tab];
   if(id==='mv-u'){eqMov();return}
+  if(id==='i-sinmin'){['#i-min','#i-cp'].forEach(k=>{const x=$(k);x.disabled=e.target.checked;if(e.target.checked)x.value=''});if(!e.target.checked)$('#i-min').focus();return}
   if(id==='f-cat'){f.cat=v;f.sub='';render()}
   else if(id==='f-sub'){f.sub=v;renderLista()} else if(id==='f-marca'){f.marca=v;renderLista()} else if(id==='f-estado'){f.estado=v;renderLista()}
   else if(e.target.classList.contains('matsel')){const o=e.target.parentNode.querySelector('.matotro');o.hidden=v!=='__otro';if(!o.hidden)o.focus()}
